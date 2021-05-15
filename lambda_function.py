@@ -22,25 +22,20 @@ coingecko_suffix = "simple/price?ids={}&vs_currencies=usd&include_market_cap=tru
 region = "us-east-1"
 dynamodb = boto3.client('dynamodb', region_name=region)
 tableName = "crypto_price"
+elapsed_time_threshold = 90
 
 
 def lambda_handler(event: Any, context: Any) -> Dict[str, Union[int, str]]:
     start_time = time.time()
-    print(event["httpMethod"])
     if event["httpMethod"] == "GET":
-        # print(f"QP: {event['queryStringParameters']}")
         asset = event["queryStringParameters"]["asset"]
         if asset is None:
-            print(f"\n\nTook {util.format_numbers(time.time() - start_time)} seconds to execute.\n")
+            print_elapsed_time(start_time)
             return build_response(400, "asset must be provided in query parameter string!")
-        # print(f"ASSET TYPE: {type(asset)}")
 
         if "items" in asset:
-            # print(f"ITEMS!!! with asset: {asset} with type {type(asset)}")
             asset_new = fix_string(asset.replace("items=", ""))
             asset_list = list(json.loads(asset_new))
-            # print(f"asset_new: {asset_new}  with type: {type(list(asset_new))}")
-            # print(f"asset_list: {asset_list} with type {type(asset_list)} ")
             return handle_list_asset(asset_list, start_time)
         elif isinstance(asset, str):
             return handle_string_asset(asset, start_time)
@@ -49,19 +44,23 @@ def lambda_handler(event: Any, context: Any) -> Dict[str, Union[int, str]]:
             return handle_list_asset(asset, start_time)
 
     else:
-        print(f"\n\nTook {util.format_numbers(time.time() - start_time)} seconds to execute.\n")
+        print_elapsed_time(start_time)
         return build_response(400, "Must be a GET request!")
 
 
 def handle_string_asset(asset: str, start_time: time) -> dict:
     result = get_price(asset)
     if not result:
-        print(f"\n\nTook {util.format_numbers(time.time() - start_time)} seconds to execute.\n")
+        print_elapsed_time(start_time)
         return build_response(503,
                               f"Both messari crypto and coingecko could not find "
                               f"{asset} or could not be reach!")
-    print(f"\n\nTook {util.format_numbers(time.time() - start_time)} seconds to execute.\n")
+    print_elapsed_time(start_time)
     return build_response(200, build_body(asset, result))
+
+
+def print_elapsed_time(start_time: time) -> None:
+    print(f"\n\nTook {util.format_numbers(time.time() - start_time)} seconds to execute.\n")
 
 
 def fix_string(messed_up_string: str) -> str:
@@ -71,13 +70,7 @@ def fix_string(messed_up_string: str) -> str:
 def handle_list_asset(asset_list: list, start_time: time) -> dict:
     print(f"asset list!!!: {asset_list}")
     result_list = coingecko_metric_list(asset_list)
-    # for asset in asset_list:
-    #     result = get_price(asset)
-    #     if not result:
-    #         result_dict[asset] = None
-    #     else:
-    #         result_dict[asset] = build_body(asset, result)
-    print(f"\n\nTook {util.format_numbers(time.time() - start_time)} seconds to execute.\n")
+    print_elapsed_time(start_time)
     return build_response(200, result_list)
 
 
@@ -128,7 +121,7 @@ def coingecko_get_full_coin_list() -> list:
     # Rate limit of 100 requests per minutes.
     coin_list_url = os.path.join(coingecko_base, "coins/", "list")
     coin_list = execute_and_get_json(coin_list_url)
-    print(coin_list)
+    print(f"coin list: {coin_list}")
     return coin_list
 
 
@@ -141,7 +134,7 @@ def coingecko_metric(asset: str) -> (Tuple[float, float, float], None):
     suffix = coingecko_suffix.format(coin_needed_id_)
     full_url = os.path.join(coingecko_base, suffix)
     coin_data = execute_and_get_json(full_url)
-    print(full_url)
+    print(f"single asset full url: {full_url}")
     if len(coin_data) == 0:
         return None
     market_data = coin_data[str(coin_needed_id_).lower()]
@@ -183,11 +176,11 @@ def coingecko_metric_list(asset_list: list) -> (list, None):
             suffix += f"{coin_needed['id']}"
     if len(suffix) > 0:
         list_suffix = coingecko_suffix.format(suffix)
-        print(list_suffix)
+        print(f"printing suffix list: {list_suffix}")
         full_url = os.path.join(coingecko_base, list_suffix)
-        print(full_url)
+        print(f"printing full url: {full_url}")
         coins_data = execute_and_get_json(full_url)
-        print(coins_data)
+        print(f"printing coins data: {coins_data}")
         for key in coins_data.keys():
             coin_id = str(key).lower()
             asset = asset_mapping[coin_id]
@@ -231,12 +224,13 @@ def check_database(asset: str) -> (Tuple[float, float, float], None):
         print(f"'{asset}' found in db!")
         elapsed = (datetime.datetime.now() - all_assets[asset][1]).total_seconds()
         print(f"elapsed time between database insert of '{asset}' and now:  {util.format_numbers(elapsed)} seconds")
-        if elapsed < 45:
+        if elapsed < elapsed_time_threshold:
             current = all_assets[asset]
             print(current)
             return current[0], current[2], current[3]
         else:
-            print(f"'{asset}' is stale, will update!")
+            print(f"'{asset}' is stale since {elapsed} seconds is greater than threshold of {elapsed_time_threshold} "
+                  f"seconds, will update!")
     return None
 
 
