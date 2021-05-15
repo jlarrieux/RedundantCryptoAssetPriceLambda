@@ -121,7 +121,6 @@ def coingecko_get_full_coin_list() -> list:
     # Rate limit of 100 requests per minutes.
     coin_list_url = os.path.join(coingecko_base, "coins/", "list")
     coin_list = execute_and_get_json(coin_list_url)
-    print(f"coin list: {coin_list}")
     return coin_list
 
 
