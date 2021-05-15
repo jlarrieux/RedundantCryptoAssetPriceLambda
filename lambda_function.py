@@ -181,7 +181,7 @@ def coingecko_metric_list(asset_list: list) -> (list, None):
             if len(suffix) > 0:
                 suffix += ","
             suffix += f"{coin_needed['id']}"
-    if len(set(asset_list) - found_set) > 0:
+    if len(suffix) > 0:
         list_suffix = coingecko_suffix.format(suffix)
         print(list_suffix)
         full_url = os.path.join(coingecko_base, list_suffix)
@@ -269,9 +269,9 @@ def put_in_db(asset: str, price: float, volume: float, marketcap: float):
 
 
 if __name__ == '__main__':
-    # my_list = ["havven", "crv"]
-    # coingecko_metric_list(my_list)
-    print(trials("kyber-network"))
+    my_list = ["havven", "crv"]
+    coingecko_metric_list(my_list)
+    # print(trials("kyber-network"))
     # val = "ethrsiapy"
     # event = dict()
     # context = dict()
