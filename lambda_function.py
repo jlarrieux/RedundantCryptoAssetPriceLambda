@@ -22,7 +22,7 @@ coingecko_suffix = "simple/price?ids={}&vs_currencies=usd&include_market_cap=tru
 region = "us-east-1"
 dynamodb = boto3.client('dynamodb', region_name=region)
 tableName = "crypto_price"
-elapsed_time_threshold = 150
+elapsed_time_threshold = 180
 
 
 def lambda_handler(event: Any, context: Any) -> Dict[str, Union[int, str]]:
