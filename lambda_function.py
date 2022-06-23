@@ -11,8 +11,7 @@ import boto3
 from six.moves import urllib
 from six.moves.urllib.error import HTTPError
 import util
-from json.decoder import JSONDecodeError
-import re
+import backend_commons_aws_util
 
 messari_url = "https://data.messari.io/api/v1/assets/{}/metrics?fields=id,symbol,market_data/price_usd," \
               "market_data/real_volume_last_24_hours,market_data/volume_last_24_hours,marketcap/current_marketcap_usd "
@@ -23,6 +22,7 @@ region = "us-east-1"
 dynamodb = boto3.client('dynamodb', region_name=region)
 tableName = "crypto_price"
 elapsed_time_threshold = 180
+coin_gecko_full_list_key = "cryptofund202x/coin_gecko_full_list.pkl"
 
 
 def lambda_handler(event: Any, context: Any) -> Dict[str, Union[int, str]]:
@@ -118,9 +118,22 @@ def messari_metric(asset: str) -> (Tuple[float, float, float], None):
 
 
 def coingecko_get_full_coin_list() -> list:
-    # Rate limit of 100 requests per minutes.
+    # Rate limit of 100 requests per minutes so we must cache in s3.
+    now = datetime.datetime.now()
+    coin_list = ""
+    if now.hour == 0 and now.minute == 0:
+        coin_list = _get_coingecko_full_list_remote()
+        backend_commons_aws_util.save_to_s3(coin_gecko_full_list_key, coin_list)
+    else:
+        coin_list = backend_commons_aws_util.load_from_s3(coin_gecko_full_list_key)
+
+    return coin_list
+
+
+def _get_coingecko_full_list_remote():
     coin_list_url = os.path.join(coingecko_base, "coins/", "list")
     coin_list = execute_and_get_json(coin_list_url)
+    print(coin_list)
     return coin_list
 
 
@@ -262,14 +275,9 @@ def put_in_db(asset: str, price: float, volume: float, marketcap: float):
 
 
 if __name__ == '__main__':
-    my_list = ["havven", "crv"]
-    coingecko_metric_list(my_list)
-    # print(trials("kyber-network"))
-    # val = "ethrsiapy"
-    # event = dict()
-    # context = dict()
-    # event["httpMethod"] = "GET"
-    # asset = dict()
-    # asset["asset"] = val
-    # event["queryStringParameters"] = asset
-    # print(lambda_handler(event=event, context=None))
+    print(coingecko_metric("alpha-finance"))
+    # val = coingecko_get_full_coin_list()
+    # print(val)
+    # backend_commons_aws_util.save_to_s3(coin_gecko_full_list_key, val)
+    # val = backend_commons_aws_util.load_from_s3(coin_gecko_full_list_key)
+    # print(val)
