@@ -261,17 +261,21 @@ def get_all_db_assets() -> Dict:
 
 def put_in_db(asset: str, price: float, volume: float, marketcap: float):
     print(f"Putting {asset} in db!!!")
-    dynamodb.update_item(TableName=tableName, Key={
-        "name": {
-            "S": asset
-        }}, ExpressionAttributeNames={
-        "#datetime": "datetime"},
-                         UpdateExpression="set usd_price = :p, #datetime = :d, volume_last_24_hours = :v, current_marketcap_usd = :m",
-                         ExpressionAttributeValues={
-                             ":p": {"N": str(price)},
-                             ":d": {"S": str(datetime.datetime.now())},
-                             ":v": {"N": str(volume)},
-                             ":m": {"N": str(marketcap)}})
+    if asset is None or price is None or volume is None or marketcap is None:
+        print(f"Cannot save in database because one of the following is None:\nasset: {asset}, price: {price}, "
+              f"volume: {volume}, marketcap: {marketcap}")
+    else:
+        dynamodb.update_item(TableName=tableName, Key={
+            "name": {
+                "S": asset
+            }}, ExpressionAttributeNames={
+            "#datetime": "datetime"},
+                             UpdateExpression="set usd_price = :p, #datetime = :d, volume_last_24_hours = :v, current_marketcap_usd = :m",
+                             ExpressionAttributeValues={
+                                 ":p": {"N": str(price)},
+                                 ":d": {"S": str(datetime.datetime.now())},
+                                 ":v": {"N": str(volume)},
+                                 ":m": {"N": str(marketcap)}})
 
 
 if __name__ == '__main__':
