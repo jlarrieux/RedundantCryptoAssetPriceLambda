@@ -6,6 +6,7 @@ from typing import Dict
 from typing import List
 from typing import Tuple
 from typing import Union
+from urllib.request import Request, urlopen
 import time
 import boto3
 from six.moves import urllib
@@ -147,8 +148,11 @@ def coingecko_metric(asset: str) -> (Tuple[float, float, float], None):
     full_url = os.path.join(coingecko_base, suffix)
     coin_data = execute_and_get_json(full_url)
     print(f"single asset full url: {full_url}")
+    print("coin_data: ", coin_data)
     if len(coin_data) == 0:
         return None
+
+    print("red: ", coin_data[coin_needed_id_])
     market_data = coin_data[str(coin_needed_id_).lower()]
     usd_price = market_data["usd"]
     usd_volume = market_data["usd_24h_vol"]
@@ -158,6 +162,7 @@ def coingecko_metric(asset: str) -> (Tuple[float, float, float], None):
 
 def get_coingecko_coin_needed(coin_list: list, asset: str):
     coin_needed = None
+    print(coin_list)
     for coin in coin_list:
         if coin["name"] == asset or coin["symbol"] == asset or coin["id"] == asset:
             coin_needed = coin
@@ -212,8 +217,13 @@ def create_result_dict(asset: str, usd_price: float, usd_volume: float, usd_mark
 
 
 def execute_and_get_json(url: str, header: dict = None) -> (List, Dict):
-    request = urllib.request.Request(url, header)
-    jay = json.loads(urllib.request.urlopen(request).read().decode())
+    print(url)
+    if not header:
+        header = {"User-Agent": "Mozilla/5.0"}
+    print(header)
+    request_site = Request(url, headers=header)
+    webpage = urlopen(request_site).read()
+    jay = json.loads(webpage.decode())
     return jay
 
 
@@ -279,8 +289,8 @@ def put_in_db(asset: str, price: float, volume: float, marketcap: float):
 
 
 if __name__ == '__main__':
-    print(coingecko_metric("alpha-finance"))
-    # val = coingecko_get_full_coin_list()
+    print(coingecko_metric("julien"))
+    val = coingecko_get_full_coin_list()
     # print(val)
     # backend_commons_aws_util.save_to_s3(coin_gecko_full_list_key, val)
     # val = backend_commons_aws_util.load_from_s3(coin_gecko_full_list_key)
