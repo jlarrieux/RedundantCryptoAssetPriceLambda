@@ -164,9 +164,14 @@ def get_coingecko_coin_needed(coin_list: list, asset: str):
     coin_needed = None
     print(coin_list)
     for coin in coin_list:
-        if coin["name"] == asset or coin["symbol"] == asset or coin["id"] == asset:
-            coin_needed = coin
-            break
+        # Adding exception for magic since there are many coins with the name
+        if asset == "magic":
+            if coin['id'] == asset:
+                coin_needed = coin
+        else:
+            if coin["name"] == asset or coin["symbol"] == asset or coin["id"] == asset:
+                coin_needed = coin
+                break
     return coin_needed
 
 
@@ -289,7 +294,7 @@ def put_in_db(asset: str, price: float, volume: float, marketcap: float):
 
 
 if __name__ == '__main__':
-    print(coingecko_metric("julien"))
+    print(coingecko_metric("magic"))
     val = coingecko_get_full_coin_list()
     # print(val)
     # backend_commons_aws_util.save_to_s3(coin_gecko_full_list_key, val)
