@@ -185,11 +185,12 @@ def coingecko_metric_list(asset_list: list) -> (list, None):
         asset_in_database_and_not_stale = check_database(asset)
         if asset_in_database_and_not_stale is not None:
             found_set.add(asset)
+            print(f'already found: {asset} in db, adding to result...')
             result_list.append(
                 create_result_dict(asset, asset_in_database_and_not_stale[0], asset_in_database_and_not_stale[1],
                                    asset_in_database_and_not_stale[2]))
             continue
-
+        print(f'{asset} not found in db, adding to coingecko list ...')
         coin_needed = get_coingecko_coin_needed(coin_list, asset)
         if coin_needed is not None:
             asset_mapping[coin_needed["id"]] = asset
@@ -204,15 +205,19 @@ def coingecko_metric_list(asset_list: list) -> (list, None):
         coins_data = execute_and_get_json(full_url)
         print(f"printing coins data: {coins_data}")
         for key in coins_data.keys():
-            coin_id = str(key).lower()
-            asset = asset_mapping[coin_id]
-            market_data = coins_data[coin_id]
-            usd_price = market_data["usd"]
-            usd_volume = market_data["usd_24h_vol"]
-            usd_marketcap = market_data["usd_market_cap"]
-            put_in_db(asset, usd_price, usd_volume, usd_marketcap)
-            result_list.append(create_result_dict(asset, usd_price, usd_volume, usd_marketcap))
-        print(f"result List: {result_list}")
+            try:
+                coin_id = str(key).lower()
+                asset = asset_mapping[coin_id]
+                market_data = coins_data[coin_id]
+                usd_price = market_data["usd"]
+                usd_volume = market_data["usd_24h_vol"]
+                usd_marketcap = market_data["usd_market_cap"]
+                put_in_db(asset, usd_price, usd_volume, usd_marketcap)
+                result_list.append(create_result_dict(asset, usd_price, usd_volume, usd_marketcap))
+            except KeyError as error:
+                print(f"error occurred for key: {key} and coin_id: {coin_id} with actual error: ", error)
+
+    print(f"result List: {result_list}")
     return result_list
 
 
@@ -294,8 +299,8 @@ def put_in_db(asset: str, price: float, volume: float, marketcap: float):
 
 
 if __name__ == '__main__':
-    print(coingecko_metric("magic"))
-    val = coingecko_get_full_coin_list()
+    print(coingecko_metric_list(['alpha-finance', 'sand', 'tokemak', 'rook', 'tusd', 'premia', 'convex-finance', 'sushi', 'hop', 'ethereum', 'yfi', 'wbtc', 'kyber-network', 'mirror-protocol', 'xsushi', 'rpl', '1inch', 'op', 'susd', 'plutusdao', 'rgt', 'ilv', 'trove', 'degen', 'dnt', 'alcx', 'lyra-finance', 'tcap', 'dai', 'ftm', 'omg', 'alink', 'dpx', 'fxs', 'fpis', 'conic-finance', 'dopex-rebate-token', 'big-data-protocol', 'spell', 'mln', 'magic', 'hegic', 'usd-coin', 'nftx', 'havven', 'the-graph', 'ulu', 'matic', 'weth', 'arch', 'link', 'perp', 'lrc', 'vision', 'stake-dao', 'silo-finance', 'airswap', 'bal', 'radar', 'uniswap', 'audio', 'mvi', 'jpeg-d', 'immutable-x', 'crv', 'rbn', 'aave', 'thales']))
+    # val = coingecko_get_full_coin_list()
     # print(val)
     # backend_commons_aws_util.save_to_s3(coin_gecko_full_list_key, val)
     # val = backend_commons_aws_util.load_from_s3(coin_gecko_full_list_key)
