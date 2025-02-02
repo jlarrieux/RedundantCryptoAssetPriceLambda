@@ -8,6 +8,9 @@ WORKDIR /app
 ARG GIT_PAT
 # Set the Personal Access Token as an environment variable
 ENV GIT_PAT=$GIT_PAT
+ENV AWS_ACCESS_KEY_ID=${AWS_LIGHTSAIL_ACCESS_KEY_ID}
+ENV AWS_SECRET_ACCESS_KEY=${AWS_LIGHTSAIL_SECRET_ACCESS_KEY}
+ENV PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
 
 # Environment variables to optimize Python
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
@@ -40,6 +43,9 @@ RUN mkdir -p /tmp/prometheus_multiproc && \
 
 # Copy supervisor configuration
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Create supervisor log directory
+RUN mkdir -p /var/log/supervisor && chmod 777 /var/log/supervisor
 
 # Expose port for Uvicorn
 EXPOSE ${NOMAD_PORT_http} ${NOMAD_PORT_metrics}

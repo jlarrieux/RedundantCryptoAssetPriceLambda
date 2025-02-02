@@ -36,9 +36,9 @@ logger.setLevel(logging.INFO)
 app = Quart(__name__)
 
 # Prometheus Metrics
-REQUEST_COUNT = Counter("requests_total", "Total number of requests", ["endpoint", "method"])
+REQUEST_COUNT = Counter("requests_total", "Total number of requests", ["endpoint", "method", "type"])
 ERROR_COUNT = Counter("errors_total", "Total number of errors", ["endpoint", "error_type"])
-REQUEST_LATENCY = Histogram("request_latency_seconds", "Request latency", ["endpoint"])
+REQUEST_LATENCY = Histogram("request_latency_seconds", "Request latency", ["endpoint", "type"])
 CURRENT_REQUESTS = Gauge("current_requests", "Number of in-progress requests")
 
 
@@ -57,7 +57,7 @@ async def metrics():
 @app.route('/transform-asset', methods=['GET'])
 async def transform_asset():
     start_time = time.time()
-    REQUEST_COUNT.labels(endpoint="transform-asset", method="GET").inc()
+    REQUEST_COUNT.labels(endpoint="transform-asset", method="GET", type="transformed").inc()
     CURRENT_REQUESTS.inc()
 
     asset = request.args.get('asset')
@@ -70,7 +70,7 @@ async def transform_asset():
     try:
         logger.info(f"Transforming asset {asset}")
         transformed_asset = transformer.transform_asset(asset)
-        REQUEST_LATENCY.labels(endpoint="transform-asset").observe(time.time() - start_time)
+        REQUEST_LATENCY.labels(endpoint="transform-asset", type="transformed").observe(time.time() - start_time)
         CURRENT_REQUESTS.dec()
         return jsonify({"transformed_asset": transformed_asset, "initial_asset": asset}), 200
     except Exception as e:
