@@ -4,11 +4,9 @@ import time
 
 import prometheus_client
 from cryptofund20x_misc.custom_formatter import CustomFormatter
-from flask import jsonify
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST, core, ProcessCollector
-from quart import request, Quart
+from quart import request, Quart, jsonify
 
-import price_service
 import transformer
 from price_service import PriceService
 
@@ -85,6 +83,12 @@ async def transform_asset():
 @app.route('/price/<asset>', methods=['GET'])
 async def price_single(asset: str):
     """Fetch the price of a single asset."""
+
+    if not asset or not asset.strip():
+        logger.warning("Empty or invalid asset provided.")
+        ERROR_COUNT.labels(endpoint="price_single", error_type="invalid_input").inc()
+        return jsonify({"error": "Invalid asset provided"}), 400
+
     start_time = time.time()
     REQUEST_COUNT.labels(endpoint="price_single", method="GET", type="single").inc()
     CURRENT_REQUESTS.inc()
@@ -143,7 +147,7 @@ async def price_multiple():
     try:
         logger.info(f"Fetching prices for assets: {asset_list}")
         price_exec = PriceService()
-        result = await price_exec.coingecko_metric_list_async(asset_list)
+        result = await price_exec.get_prices(asset_list)
 
         if not result:
             logger.warning(f"No price data found for assets: {asset_list}")
