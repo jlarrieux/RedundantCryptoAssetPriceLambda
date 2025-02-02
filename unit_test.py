@@ -1,5 +1,5 @@
 import unittest
-import lambda_function
+import price_service
 import time
 
 qp = "queryStringParameters"

@@ -1,0 +1,19 @@
+# requirements-test.txt
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+aiohttp==3.9.1
+# If you need eth-typing, specify the version
+eth-typing>=3.0.0
+# If you need web3, specify the version
+web3>=6.11.4
+
+# Directory structure should be:
+# project_root/
+# ├── src/
+# │   └── coin_gecko_price_provider.py
+# ├── tests/
+# │   ├── __init__.py
+# │   └── test_coingecko_client.py
+# ├── requirements.txt
+# └── requirements-test.txt
