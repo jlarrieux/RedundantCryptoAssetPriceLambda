@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple
 
 from cryptofund20x_misc.custom_formatter import CustomFormatter
 from prometheus_client import Counter, Histogram
@@ -8,6 +8,13 @@ from prometheus_client import Counter, Histogram
 from coin_price_provider.coin_gecko_price_provider import CoingeckoClient
 from coin_price_provider.messari_price_provider import MessariClient
 
+# Metrics
+PRICE_SERVICE_BATCH_FAILURE = Counter('price_service_complete_batch_failures_total',
+                                      'Number of times all APIs failed for a batch')
+PRICE_SERVICE_FALLBACK_ATTEMPTS = Counter('price_service_fallback_attempts_total',
+                                         'Number of times fallback to Messari was attempted')
+PRICE_SERVICE_REQUEST_TIME = Histogram('price_service_request_duration_seconds',
+                                      'Time spent processing complete request')
 
 class PriceService:
     def __init__(self):
@@ -20,17 +27,9 @@ class PriceService:
         handler.setFormatter(CustomFormatter())
         self.logger.addHandler(handler)
 
-        # Metrics
-        self.batch_failures = Counter('price_service_complete_batch_failures_total',
-                                      'Number of times all APIs failed for a batch')
-        self.fallback_attempts = Counter('price_service_fallback_attempts_total',
-                                         'Number of times fallback to Messari was attempted')
-        self.request_time = Histogram('price_service_request_duration_seconds',
-                                      'Time spent processing complete request')
-
     async def get_prices(self, assets: List[str]) -> Tuple[List[Dict], List[Tuple[str, str]]]:
         """Get prices for a list of assets with fallback and error handling."""
-        with self.request_time.time():
+        with PRICE_SERVICE_REQUEST_TIME.time():
             result_list = []
             failed_assets = []
 
@@ -48,7 +47,7 @@ class PriceService:
             # Try Messari as fallback for failed assets
             if failed_assets:
                 self.logger.info(f"Attempting Messari fallback for {len(failed_assets)} assets")
-                self.fallback_attempts.inc()
+                PRICE_SERVICE_FALLBACK_ATTEMPTS.inc()
                 still_failed = []
 
                 for asset, _ in failed_assets:
@@ -66,13 +65,13 @@ class PriceService:
 
             if failed_assets and not result_list:
                 self.logger.error("Complete batch failure - no prices retrieved from any source")
-                self.batch_failures.inc()
+                PRICE_SERVICE_BATCH_FAILURE.inc()
 
             return result_list, failed_assets
 
-    async def get_single_price(self, asset: str) -> Tuple[Optional[Dict], Optional[str]]:
+    async def get_single_price(self, asset: str) -> dict | tuple[None, str]:
         """Get price for a single asset with fallback and error handling."""
-        with self.request_time.time():
+        with PRICE_SERVICE_REQUEST_TIME.time():
             self.logger.info(f"Fetching single price for {asset}")
 
             # Try Coingecko first
@@ -85,7 +84,7 @@ class PriceService:
 
             # Try Messari as fallback
             self.logger.info(f"Attempting Messari fallback for {asset}")
-            self.fallback_attempts.inc()
+            PRICE_SERVICE_FALLBACK_ATTEMPTS.inc()
 
             try:
                 messari_result = await self.messari.get_price(asset)
@@ -96,7 +95,7 @@ class PriceService:
                 self.logger.error(f"{asset}: {error_msg}")
 
             # If both failed
-            self.batch_failures.inc()
+            PRICE_SERVICE_BATCH_FAILURE.inc()
             self.logger.error(f"All providers failed for {asset}")
             return None, "No data available from any provider"
 

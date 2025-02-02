@@ -12,6 +12,10 @@ from prometheus_client import Counter, Histogram
 import transformer
 from coin_price_provider import db_cache_service
 
+#Metrics
+COINGECKO_REQUESTS = Counter('coingecko_requests_total', 'Total Coingecko API requests', ['status', 'type'])
+COINGECKO_REQUEST_TIME = Histogram('coingecko_request_duration_seconds', 'Time spent in Coingecko API', ['type'])
+
 
 class CoingeckoClient:
     def __init__(self):
@@ -27,9 +31,6 @@ class CoingeckoClient:
         handler.setFormatter(CustomFormatter())
         self.logger.addHandler(handler)
 
-        # Metrics
-        self.requests = Counter('coingecko_requests_total', 'Total Coingecko API requests', ['status', 'type'])
-        self.request_time = Histogram('coingecko_request_duration_seconds', 'Time spent in Coingecko API', ['type'])
 
     async def get_full_coin_list(self) -> List[Dict]:
         """Retrieve the full coin list from Coingecko with caching."""
@@ -67,7 +68,7 @@ class CoingeckoClient:
 
     async def get_single_price(self, asset: str) -> Optional[Tuple[float, float, float]]:
         """Fetch price data for a single asset with DB caching."""
-        with self.request_time.labels('single').time():
+        with COINGECKO_REQUEST_TIME.labels('single').time():
             try:
                 self.logger.info(f"Getting price for asset: {asset}")
 
@@ -87,7 +88,7 @@ class CoingeckoClient:
 
                 if not coin_id:
                     self.logger.warning(f"No matching coin found for {transformed_asset}")
-                    self.requests.labels('failure', 'single').inc()
+                    COINGECKO_REQUESTS.labels('failure', 'single').inc()
                     return None
 
                 # Fetch from API
@@ -99,7 +100,7 @@ class CoingeckoClient:
 
                 if coin_id not in coin_data:
                     self.logger.warning(f"No data returned for {coin_id}")
-                    self.requests.labels('failure', 'single').inc()
+                    COINGECKO_REQUESTS.labels('failure', 'single').inc()
                     return None
 
                 # Parse and cache result
@@ -108,19 +109,19 @@ class CoingeckoClient:
                 await db_cache_service.store_price(asset, *result)
 
                 self.logger.info(f"Successfully fetched and cached price for {asset}")
-                self.requests.labels('success', 'single').inc()
+                COINGECKO_REQUESTS.labels('success', 'single').inc()
                 return result
 
             except Exception as e:
                 self.logger.error(f"Error getting price for {asset}: {str(e)}")
-                self.requests.labels('failure', 'single').inc()
+                COINGECKO_REQUESTS.labels('failure', 'single').inc()
                 raise Exception(f"Coingecko API error: {str(e)}")
             finally:
                 await url_service.close_session()
 
     async def get_batch_prices(self, assets: List[str]) -> Dict[str, Optional[Tuple[float, float, float]]]:
         """Fetch prices for multiple assets with transformation and error handling."""
-        with self.request_time.labels('batch').time():
+        with COINGECKO_REQUEST_TIME.labels('batch').time():
             try:
                 self.logger.info(f"Getting batch prices for {len(assets)} assets")
                 result = {}
@@ -156,7 +157,7 @@ class CoingeckoClient:
 
                 if not asset_to_coin_id:
                     self.logger.warning("No valid coin IDs found for batch")
-                    self.requests.labels('failure', 'batch').inc()
+                    COINGECKO_REQUESTS.labels('failure', 'batch').inc()
                     return result
 
                 # Fetch prices for found coin IDs
@@ -178,12 +179,12 @@ class CoingeckoClient:
                         if transformed_asset in asset_to_transformed:
                             result[asset_to_transformed[transformed_asset]] = None
 
-                self.requests.labels('success', 'batch').inc()
+                COINGECKO_REQUESTS.labels('success', 'batch').inc()
                 return result
 
             except Exception as e:
                 self.logger.error(f"Batch request failed: {str(e)}")
-                self.requests.labels('failure', 'batch').inc()
+                COINGECKO_REQUESTS.labels('failure', 'batch').inc()
                 raise Exception(f"Coingecko API error: {str(e)}")
             finally:
                 await url_service.close_session()
