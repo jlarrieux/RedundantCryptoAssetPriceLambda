@@ -5,8 +5,8 @@ from typing import List, Dict, Tuple
 from cryptofund20x_misc.custom_formatter import CustomFormatter
 from prometheus_client import Counter, Histogram
 
-from coin_price_provider.coin_gecko_price_provider import CoingeckoClient
-from coin_price_provider.messari_price_provider import MessariClient
+from pricing.coin_gecko_price_provider import CoingeckoClient
+from pricing.messari_price_provider import MessariClient
 
 # Metrics
 PRICE_SERVICE_BATCH_FAILURE = Counter('price_service_complete_batch_failures_total',

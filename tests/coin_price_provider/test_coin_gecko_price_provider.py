@@ -6,7 +6,7 @@ import pytest
 from cryptofund20x_services import url_service
 from prometheus_client import REGISTRY
 
-from coin_price_provider.coin_gecko_price_provider import CoingeckoClient
+from pricing.coin_gecko_price_provider import CoingeckoClient
 
 # Update these imports based on your project structure
 
@@ -92,8 +92,8 @@ async def test_get_full_coin_list_caching(coingecko_client):
 async def test_get_single_price(coingecko_client):
     """Test fetching single price with mocked responses."""
     with patch('cryptofund20x_services.url_service.open_url_async') as mock_url, \
-            patch('coin_price_provider.db_cache_service.get_cached_price_async') as mock_cache_get, \
-            patch('coin_price_provider.db_cache_service.store_price') as mock_cache_store:
+            patch('pricing.db_cache_service.get_cached_price_async') as mock_cache_get, \
+            patch('pricing.db_cache_service.store_price') as mock_cache_store:
         # Setup mocks
         mock_cache_get.return_value = None  # No cached data
         mock_url.side_effect = [
@@ -117,8 +117,8 @@ async def test_get_single_price(coingecko_client):
 async def test_get_batch_prices(coingecko_client):
     """Test fetching multiple prices in batch."""
     with patch('cryptofund20x_services.url_service.open_url_async') as mock_url, \
-            patch('coin_price_provider.db_cache_service.get_cached_price_async') as mock_cache_get, \
-            patch('coin_price_provider.db_cache_service.store_price') as mock_cache_store:
+            patch('pricing.db_cache_service.get_cached_price_async') as mock_cache_get, \
+            patch('pricing.db_cache_service.store_price') as mock_cache_store:
         # Setup mocks
         mock_cache_get.return_value = None
         mock_url.side_effect = [
@@ -170,7 +170,7 @@ async def test_cache_interaction():
     cached_data = (2400.0, 900000.0, 290000000.0)
 
     try:
-        with patch('coin_price_provider.db_cache_service.get_cached_price_async') as mock_cache_get:
+        with patch('pricing.db_cache_service.get_cached_price_async') as mock_cache_get:
             # Test cache hit
             mock_cache_get.return_value = cached_data
             result = await client.get_single_price("eth")

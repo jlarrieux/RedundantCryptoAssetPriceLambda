@@ -10,8 +10,8 @@ from cryptofund20x_services import url_service
 from prometheus_client import Counter, Histogram
 
 import transformer
-from coin_price_provider import redis_cache_service
-from coin_price_provider.redis_cache_service import get_cached_coin_list
+from pricing import redis_cache_service
+from pricing.redis_cache_service import get_cached_coin_list
 
 # Metrics
 COINGECKO_REQUESTS = Counter('coingecko_requests_total', 'Total Coingecko API requests', ['status', 'type'])
@@ -49,7 +49,7 @@ class CoingeckoClient:
                 raise ValueError("Expected list response from Coingecko")
 
             # Store in cache
-            await redis_cache_service.store_coin_list(coin_list)
+            await redis_cache_service.store_all_prices(coin_list)
             return coin_list
 
         except json.JSONDecodeError as e:
