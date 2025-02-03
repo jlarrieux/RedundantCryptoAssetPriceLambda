@@ -2,17 +2,18 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime
 from typing import Dict, List, Tuple, Optional
-from datetime import datetime, timedelta
 
 from cryptofund20x_misc.custom_formatter import CustomFormatter
 from cryptofund20x_services import url_service
 from prometheus_client import Counter, Histogram
 
 import transformer
-from coin_price_provider import db_cache_service
+from coin_price_provider import redis_cache_service
+from coin_price_provider.redis_cache_service import get_cached_coin_list
 
-#Metrics
+# Metrics
 COINGECKO_REQUESTS = Counter('coingecko_requests_total', 'Total Coingecko API requests', ['status', 'type'])
 COINGECKO_REQUEST_TIME = Histogram('coingecko_request_duration_seconds', 'Time spent in Coingecko API', ['type'])
 
@@ -21,9 +22,6 @@ class CoingeckoClient:
     def __init__(self):
         self.base_url = "https://api.coingecko.com/api/v3/"
         self.price_suffix = "simple/price?ids={}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true"
-        self._cached_coin_list = None
-        self._last_coin_list_update = None
-        self.coin_list_cache_duration = timedelta(hours=1)
 
         # Setup logging
         self.logger = logging.getLogger("CoingeckoClient")
@@ -31,18 +29,16 @@ class CoingeckoClient:
         handler.setFormatter(CustomFormatter())
         self.logger.addHandler(handler)
 
-
     async def get_full_coin_list(self) -> List[Dict]:
         """Retrieve the full coin list from Coingecko with caching."""
         try:
             current_time = datetime.now()
 
             # Return cached list if it's fresh
-            if (self._cached_coin_list is not None and
-                    self._last_coin_list_update is not None and
-                    current_time - self._last_coin_list_update < self.coin_list_cache_duration):
+            cached_list = await get_cached_coin_list()
+            if cached_list is not None:
                 self.logger.info("Using cached coin list")
-                return self._cached_coin_list
+                return cached_list
 
             self.logger.info("Fetching fresh coin list from Coingecko")
             coin_list_url = os.path.join(self.base_url, "coins/", "list")
@@ -52,8 +48,8 @@ class CoingeckoClient:
             if not isinstance(coin_list, list):
                 raise ValueError("Expected list response from Coingecko")
 
-            self._cached_coin_list = coin_list
-            self._last_coin_list_update = current_time
+            # Store in cache
+            await redis_cache_service.store_coin_list(coin_list)
             return coin_list
 
         except json.JSONDecodeError as e:
@@ -73,7 +69,7 @@ class CoingeckoClient:
                 self.logger.info(f"Getting price for asset: {asset}")
 
                 # First check DB cache
-                cached_data = await db_cache_service.get_cached_price_async(asset)
+                cached_data = await redis_cache_service.get_cached_price_async(asset)
                 if cached_data:
                     self.logger.info(f"Found cached price for {asset}")
                     return cached_data
@@ -106,7 +102,7 @@ class CoingeckoClient:
                 # Parse and cache result
                 market_data = coin_data[coin_id]
                 result = self.parse_market_data(market_data)
-                await db_cache_service.store_price(asset, *result)
+                await redis_cache_service.store_price(asset, *result)
 
                 self.logger.info(f"Successfully fetched and cached price for {asset}")
                 COINGECKO_REQUESTS.labels('success', 'single').inc()
@@ -130,7 +126,7 @@ class CoingeckoClient:
 
                 # First check DB cache for all assets
                 for asset in assets:
-                    cached_data = await db_cache_service.get_cached_price_async(asset)
+                    cached_data = await redis_cache_service.get_cached_price_async(asset)
                     if cached_data:
                         self.logger.info(f"Found cached price for {asset}")
                         result[asset] = cached_data
@@ -172,7 +168,7 @@ class CoingeckoClient:
                         transformed_asset = asset_to_coin_id[coin_id]
                         original_asset = asset_to_transformed[transformed_asset]
                         price_data = self.parse_market_data(market_data)
-                        await db_cache_service.store_price(original_asset, *price_data)
+                        await redis_cache_service.store_price(original_asset, *price_data)
                         result[original_asset] = price_data
                     except Exception as e:
                         self.logger.error(f"Error processing data for {coin_id}: {str(e)}")
