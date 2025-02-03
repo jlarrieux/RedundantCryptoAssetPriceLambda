@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 
 from cryptofund20x_misc.custom_formatter import CustomFormatter
@@ -11,7 +10,6 @@ from prometheus_client import Counter, Histogram
 
 import transformer
 from pricing import redis_cache_service
-from pricing.redis_cache_service import get_cached_coin_list
 
 # Metrics
 COINGECKO_REQUESTS = Counter('coingecko_requests_total', 'Total Coingecko API requests', ['status', 'type'])
@@ -32,24 +30,23 @@ class CoingeckoClient:
     async def get_full_coin_list(self) -> List[Dict]:
         """Retrieve the full coin list from Coingecko with caching."""
         try:
-            current_time = datetime.now()
-
             # Return cached list if it's fresh
-            cached_list = await get_cached_coin_list()
+            cached_list = await redis_cache_service.get_cached_coin_list()
             if cached_list is not None:
                 self.logger.info("Using cached coin list")
                 return cached_list
 
             self.logger.info("Fetching fresh coin list from Coingecko")
             coin_list_url = os.path.join(self.base_url, "coins/", "list")
-            response_text = await url_service.open_url_async(coin_list_url)
+            response_text = await url_service.open_url_async(coin_list_url, use_exponential_backoff=True,
+                                                             initial_delay=2, max_delay=60)
             coin_list = json.loads(response_text)
 
             if not isinstance(coin_list, list):
                 raise ValueError("Expected list response from Coingecko")
 
             # Store in cache
-            await redis_cache_service.store_all_prices(coin_list)
+            await redis_cache_service.store_coin_list(coin_list)
             return coin_list
 
         except json.JSONDecodeError as e:
@@ -62,7 +59,7 @@ class CoingeckoClient:
         finally:
             await url_service.close_session()
 
-    async def get_single_price(self, asset: str) -> Optional[Tuple[float, float, float]]:
+    async def get_single_price(self, asset: str) -> dict | None | tuple[float, float, float]:
         """Fetch price data for a single asset with DB caching."""
         with COINGECKO_REQUEST_TIME.labels('single').time():
             try:
@@ -115,13 +112,13 @@ class CoingeckoClient:
             finally:
                 await url_service.close_session()
 
-    async def get_batch_prices(self, assets: List[str]) -> Dict[str, Optional[Tuple[float, float, float]]]:
+    async def get_batch_prices(self, assets: List[str]) -> dict[str, dict]:
         """Fetch prices for multiple assets with transformation and error handling."""
         with COINGECKO_REQUEST_TIME.labels('batch').time():
             try:
                 self.logger.info(f"Getting batch prices for {len(assets)} assets")
                 result = {}
-                to_fetch = []
+                assets_to_fetch = []
                 asset_to_transformed = {}
 
                 # First check DB cache for all assets
@@ -133,16 +130,41 @@ class CoingeckoClient:
                     else:
                         transformed = transformer.transform_asset(asset)
                         asset_to_transformed[transformed] = asset
-                        to_fetch.append(transformed)
+                        assets_to_fetch.append(transformed)
 
-                if not to_fetch:
+                if not assets_to_fetch:
                     self.logger.info("All prices found in cache")
                     return result
 
-                # Get coin IDs for assets we need to fetch
-                coin_list = await self.get_full_coin_list()
+                # Fetch remaining prices directly
+                direct_results = await self.get_batch_prices_direct(assets_to_fetch)
+                result.update(direct_results)
+
+                return result
+            except Exception as e:
+                self.logger.error(f"Batch request failed: {str(e)}")
+                COINGECKO_REQUESTS.labels('failure', 'batch').inc()
+                raise Exception(f"Coingecko API error: {str(e)}") from e
+
+    async def get_batch_prices_direct(self, assets: List[str], max_retries: int = 10) -> Dict[
+        str, Optional[Tuple[float, float, float]]]:
+        """Fetch prices directly from Coingecko API without cache checking."""
+        with COINGECKO_REQUEST_TIME.labels('batch_direct').time():
+            try:
+                self.logger.info(f"Directly fetching batch prices for {len(assets)} assets")
+                result = {}
+                asset_to_transformed = {}
+
+                # Transform assets
+                for asset in assets:
+                    transformed = transformer.transform_asset(asset)
+                    asset_to_transformed[transformed] = asset
+
+                # Get coin IDs directly
+                coin_list = await self.get_full_coin_list()  # This still uses cache which is fine
                 asset_to_coin_id = {}
-                for transformed_asset in to_fetch:
+
+                for transformed_asset in asset_to_transformed.keys():
                     coin_id = self.get_coin_id(coin_list, transformed_asset)
                     if coin_id:
                         asset_to_coin_id[coin_id] = transformed_asset
@@ -153,13 +175,14 @@ class CoingeckoClient:
 
                 if not asset_to_coin_id:
                     self.logger.warning("No valid coin IDs found for batch")
-                    COINGECKO_REQUESTS.labels('failure', 'batch').inc()
+                    COINGECKO_REQUESTS.labels('failure', 'batch_direct').inc()
                     return result
 
-                # Fetch prices for found coin IDs
+                # Fetch prices for found coin IDs - url_service handles retries
                 suffix = self.price_suffix.format(','.join(asset_to_coin_id.keys()))
                 url = os.path.join(self.base_url, suffix)
-                response_text = await url_service.open_url_async(url)
+                response_text = await url_service.open_url_async(url, use_exponential_backoff=True, initial_delay=5,
+                                                                 max_delay=160, max_retries=max_retries)
                 coin_data = json.loads(response_text)
 
                 # Process results
@@ -168,6 +191,7 @@ class CoingeckoClient:
                         transformed_asset = asset_to_coin_id[coin_id]
                         original_asset = asset_to_transformed[transformed_asset]
                         price_data = self.parse_market_data(market_data)
+                        # Store directly in cache
                         await redis_cache_service.store_price(original_asset, *price_data)
                         result[original_asset] = price_data
                     except Exception as e:
@@ -175,15 +199,13 @@ class CoingeckoClient:
                         if transformed_asset in asset_to_transformed:
                             result[asset_to_transformed[transformed_asset]] = None
 
-                COINGECKO_REQUESTS.labels('success', 'batch').inc()
+                COINGECKO_REQUESTS.labels('success', 'batch_direct').inc()
                 return result
 
             except Exception as e:
-                self.logger.error(f"Batch request failed: {str(e)}")
-                COINGECKO_REQUESTS.labels('failure', 'batch').inc()
-                raise Exception(f"Coingecko API error: {str(e)}")
-            finally:
-                await url_service.close_session()
+                self.logger.error(f"Direct batch request failed: {str(e)}")
+                COINGECKO_REQUESTS.labels('failure', 'batch_direct').inc()
+                raise Exception(f"Coingecko API error: {str(e)}") from e
 
     @staticmethod
     def parse_market_data(market_data: Dict) -> Tuple[float, float, float]:

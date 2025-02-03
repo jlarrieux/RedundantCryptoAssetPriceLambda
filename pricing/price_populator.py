@@ -6,8 +6,7 @@ from cryptofund20x_services import url_service
 from cryptofund20x_utils_second import list_utils
 from prometheus_client import Counter, Gauge
 
-from price_service import PriceService
-from pricing import redis_cache_service
+from pricing.coin_gecko_price_provider import CoingeckoClient
 
 # Setup logging
 logger = logging.getLogger("redis_cache")
@@ -35,40 +34,51 @@ all_network_price_list = ['1inch', 'aave', 'airswap', 'alcx', 'alink', 'alpha-fi
 
 
 async def build_price_cache():
-    start_time = asyncio.get_event_loop().time()
-    # Split into smaller chunks (e.g., 10-15 assets per chunk)
     symbol_chunks = list_utils.split_list_equally_into_n_lists(all_network_price_list, 5)
-    price_service = PriceService()
+    coingecko_client = CoingeckoClient()  # Using CoingeckoClient directly
 
     all_successes = []
     all_failures = []
-    for i, chunk in enumerate(symbol_chunks):
-        chunk_name = f"chunk_{i + 1}"
-        logger.info(f"\n\nProcessing chunk {chunk_name}")
-        try:
-            # Process one chunk at a time
-            successes, failures = await price_service.get_prices(chunk)
-            all_successes.extend(successes)
-            all_failures.extend(failures)
-            PRICE_FETCH_SUCCESS.labels(asset_chunk=chunk_name).inc()
-            # Add a small delay between chunks to respect rate limits
-            await asyncio.sleep(1.2)  # 1.2 seconds delay between chunks
 
-        except Exception as e:
-            error_type = type(e).__name__
-            logger.error(f"Error processing chunk {chunk}: {str(e)}")
-            PRICE_FETCH_ERRORS.labels(asset_chunk=chunk_name, error_type=error_type).inc()
-            continue
-        finally:
-            await url_service.close_session()
+    try:
+        for i, chunk in enumerate(symbol_chunks):
+            chunk_name = f"chunk_{i + 1}"
+            logger.info(f"\n\n\n\nProcessing chunk {chunk_name}")
+            try:
+                # Use the direct method that bypasses cache checking
+                results = await coingecko_client.get_batch_prices_direct(chunk)
 
-    if all_successes:
-        logger.info(f"Successfully processed {len(all_successes)} chunks")
-        duration = asyncio.get_event_loop().time() - start_time
-        ASSETS_PROCESSED.set(len(all_successes))
-        CACHE_UPDATE_DURATION.set(duration)
-        FAILED_ASSETS.set(len(all_failures))
-        await redis_cache_service.store_all_prices(all_successes)
+                # Split results into successes and failures
+                successes = []
+                failures = []
+                for asset, result in results.items():
+                    if result is not None:
+                        successes.append(asset)
+                    else:
+                        failures.append(asset)
+
+                all_successes.extend(successes)
+                all_failures.extend(failures)
+
+                PRICE_FETCH_SUCCESS.labels(asset_chunk=chunk_name).inc()
+                # Only sleep if this isn't the last chunk
+                if i < len(symbol_chunks) -1:
+                    logger.info(f"\n\nDone with {chunk_name} so sleeping with i: {i} and {len(symbol_chunks)}")
+                    await asyncio.sleep(2)
+
+            except Exception as e:
+                error_type = type(e).__name__
+                logger.error(f"Error processing chunk {chunk}: {str(e)}")
+                PRICE_FETCH_ERRORS.labels(asset_chunk=chunk_name, error_type=error_type).inc()
+                all_failures.extend(chunk)
+                continue
+
+            # url_service already handles delays between requests
+
+    finally:
+        await url_service.close_session()
+
+    return all_successes, all_failures
 
 
 if __name__ == '__main__':

@@ -1,7 +1,8 @@
 import json
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
+
 import aioredis
 from cryptofund20x_misc.custom_formatter import CustomFormatter
 
@@ -17,8 +18,10 @@ handler = logging.StreamHandler()
 handler.setFormatter(CustomFormatter())
 logger.addHandler(handler)
 
+
 async def get_redis_client():
     return aioredis.from_url(REDIS_HOST, decode_responses=True, db=0)
+
 
 async def store_price(asset: str, price: float, volume: float, marketcap: float) -> bool:
     """Store asset price data in Redis."""
@@ -77,6 +80,7 @@ async def get_cached_price_async(asset: str) -> Optional[Dict]:
         logger.error(f"Error getting cached price for {asset}: {str(e)}")
         return None
 
+
 async def get_all_cached_prices() -> Dict:
     """Get all cached prices at once."""
     try:
@@ -101,3 +105,15 @@ async def get_cached_coin_list() -> Optional[List[Dict]]:
     except Exception as e:
         logger.error(f"Error retrieving coin list: {str(e)}")
         return None
+
+
+async def store_coin_list(coin_list: List[Dict]) -> bool:
+    """Store coin list in Redis with proper expiration."""
+    try:
+        redis_client = await get_redis_client()
+        await redis_client.set(COIN_LIST_KEY, json.dumps(coin_list), ex=PRICE_EXPIRE_TIME)
+        logger.info("coin list saved!")
+        return True
+    except Exception as e:
+        logger.error(f"Error storing coin list: {str(e)}")
+        return False
