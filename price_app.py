@@ -185,13 +185,16 @@ async def scheduled_task():
 @app.before_serving
 async def startup():
     try:
-        scheduler.add_job(scheduled_task(), 'cron', minute='*/3')
+        scheduler.add_job(scheduled_task, 'cron', minute='*/3')
         scheduler.start()
         logger.info(f"Scheduler started")
         jobs = scheduler.get_jobs()
         job_list = [{'id': job.id, 'next_run_time': str(job.next_run_time), 'trigger': str(job.trigger)} for job in
                     jobs]
         logger.info(f"job lists: {job_list}")
+        logger.info("About to do initial price cache")
+        await scheduled_task()
+        logger.info("Initial price cache successful")
     except Exception as e:
         logger.error(f"An error occurred during startup: {e}")
         ERROR_COUNT.labels(endpoint="startup", error_type="scheduler_failure").inc()
