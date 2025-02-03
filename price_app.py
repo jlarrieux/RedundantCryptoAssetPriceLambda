@@ -4,13 +4,13 @@ import time
 
 import prometheus_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from cryptofund20x_misc import config
 from cryptofund20x_misc.custom_formatter import CustomFormatter
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST, core, ProcessCollector
 from quart import request, Quart, jsonify
 
 import transformer
 from price_service import PriceService
-from pricing import price_populator
 
 # Enable multiprocess mode before creating any metrics
 if 'PROMETHEUS_MULTIPROC_DIR' in os.environ:
@@ -170,31 +170,16 @@ async def price_multiple():
         return jsonify({"error": "Internal server error"}), 500
 
 
-async def scheduled_task():
-    """Task to periodically update the price cache"""
-    with SCHEDULER_TASK_DURATION.time():
-        try:
-            await price_populator.build_price_cache()
-            SCHEDULER_TASK_SUCCESS.inc()
-            logger.info("Successfully completed scheduled price cache update")
-        except Exception as e:
-            logger.critical(f"An error occurred while populating price cache: {e}")
-            ERROR_COUNT.labels(endpoint="scheduled_task", error_type="cache_update_failure").inc()
-
-
 @app.before_serving
 async def startup():
     try:
-        scheduler.add_job(scheduled_task, 'cron', minute='*/3')
+        config.set_log_levels()
         scheduler.start()
         logger.info(f"Scheduler started")
         jobs = scheduler.get_jobs()
         job_list = [{'id': job.id, 'next_run_time': str(job.next_run_time), 'trigger': str(job.trigger)} for job in
                     jobs]
         logger.info(f"job lists: {job_list}")
-        logger.info("About to do initial price cache")
-        await scheduled_task()
-        logger.info("Initial price cache successful")
     except Exception as e:
         logger.error(f"An error occurred during startup: {e}")
         ERROR_COUNT.labels(endpoint="startup", error_type="scheduler_failure").inc()
