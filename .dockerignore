@@ -1,0 +1,36 @@
+# Exclude data directory from Docker build
+data/
+
+# Common exclusions
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+.coverage
+.env
+.venv
+env/
+venv/
+.git/
+.gitignore
+*.log
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.egg-info/
+build/
+dist/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker files
+Dockerfile*
+.dockerignore
