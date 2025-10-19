@@ -6,11 +6,20 @@ import prometheus_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from cryptofund20x_misc import config
 from cryptofund20x_misc.custom_formatter import CustomFormatter
+from cryptofund20x_interfaces.loggable_interface import TraceContextFilter
+from cryptofund20x_services.url_util import extract_trace_context
+from opentelemetry import trace, context as otel_context
+from opentelemetry.propagate import set_global_textmap
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST, core, ProcessCollector
 from quart import request, Quart, jsonify
 
 import transformer
 from price_service import PriceService
+
+# Configure global propagator for trace context extraction from HTTP headers
+# This MUST be set before calling extract() to parse traceparent headers
+set_global_textmap(TraceContextTextMapPropagator())
 
 # Enable multiprocess mode before creating any metrics
 if 'PROMETHEUS_MULTIPROC_DIR' in os.environ:
@@ -32,8 +41,12 @@ if 'PROMETHEUS_MULTIPROC_DIR' in os.environ:
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 handler.setFormatter(CustomFormatter())
+handler.addFilter(TraceContextFilter(None))
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+
+# Initialize OpenTelemetry tracer
+tracer = trace.get_tracer(__name__)
 
 app = Quart(__name__)
 scheduler = AsyncIOScheduler()
@@ -94,6 +107,15 @@ async def price_single(asset: str):
         ERROR_COUNT.labels(endpoint="price_single", error_type="invalid_input").inc()
         return jsonify({"error": "Invalid asset provided"}), 400
 
+    # Extract trace context from incoming HTTP headers
+    request_headers_dict = dict(request.headers)
+    print(f"[DEBUG price_app /price] Request headers: {request_headers_dict}")
+
+    # Extract trace context from HTTP headers
+    # extract_trace_context handles header normalization internally
+    trace_context = extract_trace_context(request_headers_dict)
+    context_token = otel_context.attach(trace_context)
+
     start_time = time.time()
     REQUEST_COUNT.labels(endpoint="price_single", method="GET", type="single").inc()
     CURRENT_REQUESTS.inc()
@@ -125,30 +147,41 @@ async def price_single(asset: str):
         ERROR_COUNT.labels(endpoint="price_single", error_type="exception").inc()
         CURRENT_REQUESTS.dec()
         return jsonify({"error": "Internal server error"}), 500
+    finally:
+        # Detach the trace context to clean up
+        otel_context.detach(context_token)
 
 
 @app.route('/prices', methods=['GET'])
 async def price_multiple():
     """Fetch prices for multiple assets."""
+    # Extract trace context from incoming HTTP headers
+    request_headers_dict = dict(request.headers)
+    print(f"[DEBUG price_app /prices] Request headers: {request_headers_dict}")
+
+    # Extract trace context from HTTP headers
+    # extract_trace_context handles header normalization internally
+    trace_context = extract_trace_context(request_headers_dict)
+    context_token = otel_context.attach(trace_context)
+
     start_time = time.time()
     REQUEST_COUNT.labels(endpoint="price_multiple", method="GET", type="list").inc()
     CURRENT_REQUESTS.inc()
 
-    assets_param = request.args.get('assets')
-    if not assets_param:
-        logger.error("No assets specified")
-        ERROR_COUNT.labels(endpoint="price_multiple", error_type="missing_assets").inc()
-        CURRENT_REQUESTS.dec()
-        return jsonify({"error": "No assets specified"}), 400
-
-    asset_list = assets_param.split(',')
-    if not asset_list:
-        logger.error("Empty asset list")
-        ERROR_COUNT.labels(endpoint="price_multiple", error_type="empty_list").inc()
-        CURRENT_REQUESTS.dec()
-        return jsonify({"error": "Asset list cannot be empty"}), 400
-
     try:
+        assets_param = request.args.get('assets')
+        if not assets_param:
+            logger.error("No assets specified")
+            ERROR_COUNT.labels(endpoint="price_multiple", error_type="missing_assets").inc()
+            CURRENT_REQUESTS.dec()
+            return jsonify({"error": "No assets specified"}), 400
+
+        asset_list = assets_param.split(',')
+        if not asset_list:
+            logger.error("Empty asset list")
+            ERROR_COUNT.labels(endpoint="price_multiple", error_type="empty_list").inc()
+            CURRENT_REQUESTS.dec()
+            return jsonify({"error": "Asset list cannot be empty"}), 400
         logger.info(f"Fetching prices for assets: {asset_list}")
         price_exec = PriceService()
         result = await price_exec.get_prices(asset_list)
@@ -164,10 +197,13 @@ async def price_multiple():
         return jsonify({"prices": result}), 200
 
     except Exception as e:
-        logger.error(f"Error fetching prices for assets {asset_list}: {e}")
+        logger.error(f"Error fetching prices for assets: {e}")
         ERROR_COUNT.labels(endpoint="price_multiple", error_type="exception").inc()
         CURRENT_REQUESTS.dec()
         return jsonify({"error": "Internal server error"}), 500
+    finally:
+        # Detach the trace context to clean up
+        otel_context.detach(context_token)
 
 
 @app.before_serving

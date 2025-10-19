@@ -72,6 +72,6 @@ class PriceService:
 
 if __name__ == '__main__':
     pr = PriceService()
-    result = asyncio.run(pr.get_single_price("eth"))
+    result = asyncio.run(pr.get_single_price("sdai"))
     print(result)
     print(f"asset: {result['asset']}\t usd_price: {result['usd_price']}")
