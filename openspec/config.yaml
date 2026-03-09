@@ -1,0 +1,7 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Python 3.10, Quart (async Flask), aioredis, Prometheus
+  Shared library: Cryptofund20xShared (cryptofund20x_services.db_layer_caller)
+  Domain: Read-only cryptocurrency price query service (reads from Redis, PricePopulator writes)
+  Conventions: PEP8, async/await throughout
