@@ -248,3 +248,7 @@ $RECYCLE.BIN/
 .aws-sam/*
 
 # End of https://www.gitignore.io/api/osx,linux,python,windows,pycharm,visualstudiocode
+
+# Hermes coordination
+.hermes.json
+.hermes/

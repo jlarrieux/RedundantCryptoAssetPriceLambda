@@ -6,6 +6,7 @@ from cryptofund20x_misc.custom_formatter import CustomFormatter
 from prometheus_client import Counter, Histogram
 
 from pricing import redis_cache_service
+from pricing.redis_cache_service import get_cached_prices_batch
 
 # Metrics
 PRICE_SERVICE_FAILURE = Counter('price_service_complete_batch_failures_total',
@@ -22,27 +23,26 @@ class PriceService:
         handler.setFormatter(CustomFormatter())
         self.logger.addHandler(handler)
 
-    async def get_prices(self, assets: List[str]) -> tuple[dict[str, dict], list[str | tuple[Any, str]]] | tuple[
-        Any, list[tuple[Any, str]]]:
-        """Get prices for a list of assets with fallback and error handling."""
+    async def get_prices(self, assets: List[str]) -> tuple[dict[str, dict], list[str]]:
+        """Get prices for a list of assets using Redis pipeline."""
         with PRICE_SERVICE_REQUEST_TIME.time():
-            result_list = {}
-            failed_assets = []
+            success_dict, missed_assets, errored_assets = await get_cached_prices_batch(assets)
 
-            for asset in assets:
-                cached_data = await redis_cache_service.get_cached_price_async(asset)
-                if cached_data:
-                    self.logger.info(f"Found cached price for {asset}")
-                    result_list[asset] = cached_data
-                else:
-                    self.logger.error(f"Asset {asset} not found in redis cache in batch mode")
-                    PRICE_SERVICE_FAILURE.labels('batch').inc()
-                    failed_assets.append(asset)
+            for asset in success_dict:
+                self.logger.info(f"Found cached price for {asset}")
 
+            for asset in missed_assets:
+                self.logger.warning(f"Asset {asset} not found in redis cache in batch mode")
+
+            if errored_assets:
+                self.logger.error(f"Redis errors for assets in batch mode: {errored_assets}")
+                PRICE_SERVICE_FAILURE.labels('batch').inc()
+
+            failed_assets = missed_assets + errored_assets
             if failed_assets:
-                self.logger.error(f"Failed assets: {failed_assets}")
+                self.logger.warning(f"Failed assets: {failed_assets}")
 
-            return result_list, failed_assets
+            return success_dict, failed_assets
 
     async def get_single_price(self, asset: str) -> dict | tuple[None, str]:
         """Get price for a single asset with fallback and error handling."""

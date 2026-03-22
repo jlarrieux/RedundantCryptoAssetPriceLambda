@@ -233,3 +233,131 @@ async def test_timestamp_freshness_warning_over_30_min(
     with caplog.at_level(logging.WARNING, logger="redis_cache"):
         await redis_cache_service.get_cached_price_async("eth")
     assert any("more than 30 minutes old" in r.message for r in caplog.records)
+
+
+# ===== Batch pipeline tests =====
+
+def _make_price_data(asset, age_minutes=0):
+    ts = (datetime.now() - timedelta(minutes=age_minutes)).isoformat()
+    return {
+        'usd_price': '100.0',
+        'volume_last_24_hours': '500000.0',
+        'current_marketcap_usd': '1000000.0',
+        'timestamp': ts,
+    }
+
+
+def _make_mock_pipeline(execute_return=None, execute_side_effect=None):
+    """Create a mock pipeline that works as an async context manager."""
+    mock_pipe = MagicMock()
+    mock_pipe.hgetall = MagicMock()
+    if execute_side_effect:
+        mock_pipe.execute = AsyncMock(side_effect=execute_side_effect)
+    else:
+        mock_pipe.execute = AsyncMock(return_value=execute_return or [])
+    mock_pipe.__aenter__ = AsyncMock(return_value=mock_pipe)
+    mock_pipe.__aexit__ = AsyncMock(return_value=False)
+    return mock_pipe
+
+
+@patch("pricing.redis_cache_service.get_redis_url",
+       return_value="redis://192.168.1.252:6379/0")
+@patch("pricing.redis_cache_service.aioredis")
+async def test_batch_all_assets_found(mock_aioredis, mock_get_url):
+    mock_pipe = _make_mock_pipeline([_make_price_data("eth"), _make_price_data("btc")])
+    mock_client = AsyncMock()
+    mock_client.pipeline = MagicMock(return_value=mock_pipe)
+    mock_aioredis.from_url.return_value = mock_client
+
+    success, missed, errored = await redis_cache_service.get_cached_prices_batch(["eth", "btc"])
+    assert set(success.keys()) == {"eth", "btc"}
+    assert missed == []
+    assert errored == []
+
+
+@patch("pricing.redis_cache_service.get_redis_url",
+       return_value="redis://192.168.1.252:6379/0")
+@patch("pricing.redis_cache_service.aioredis")
+async def test_batch_partial_miss(mock_aioredis, mock_get_url):
+    mock_pipe = _make_mock_pipeline([_make_price_data("eth"), {}])
+    mock_client = AsyncMock()
+    mock_client.pipeline = MagicMock(return_value=mock_pipe)
+    mock_aioredis.from_url.return_value = mock_client
+
+    success, missed, errored = await redis_cache_service.get_cached_prices_batch(["eth", "unknown"])
+    assert "eth" in success
+    assert missed == ["unknown"]
+    assert errored == []
+
+
+@patch("pricing.redis_cache_service.get_redis_url",
+       return_value="redis://192.168.1.252:6379/0")
+@patch("pricing.redis_cache_service.aioredis")
+async def test_batch_per_command_error(mock_aioredis, mock_get_url):
+    mock_pipe = _make_mock_pipeline([_make_price_data("eth"), ResponseError("WRONGTYPE")])
+    mock_client = AsyncMock()
+    mock_client.pipeline = MagicMock(return_value=mock_pipe)
+    mock_aioredis.from_url.return_value = mock_client
+
+    success, missed, errored = await redis_cache_service.get_cached_prices_batch(["eth", "bad_key"])
+    assert "eth" in success
+    assert missed == []
+    assert errored == ["bad_key"]
+
+
+@patch("pricing.redis_cache_service.get_redis_url",
+       return_value="redis://192.168.1.252:6379/0")
+@patch("pricing.redis_cache_service.aioredis")
+async def test_batch_pipeline_connection_failure(mock_aioredis, mock_get_url):
+    mock_pipe = _make_mock_pipeline(execute_side_effect=RedisConnectionError("refused"))
+    mock_client = AsyncMock()
+    mock_client.pipeline = MagicMock(return_value=mock_pipe)
+    mock_aioredis.from_url.return_value = mock_client
+
+    success, missed, errored = await redis_cache_service.get_cached_prices_batch(["eth", "btc", "aave"])
+    assert success == {}
+    assert missed == []
+    assert set(errored) == {"eth", "btc", "aave"}
+    assert redis_cache_service._cached_redis_url is None
+
+
+@patch("pricing.redis_cache_service.get_redis_url",
+       return_value="redis://192.168.1.252:6379/0")
+@patch("pricing.redis_cache_service.aioredis")
+async def test_batch_timestamp_staleness_logging(mock_aioredis, mock_get_url, caplog):
+    mock_pipe = _make_mock_pipeline([
+        _make_price_data("fresh", age_minutes=5),
+        _make_price_data("stale_30m", age_minutes=45),
+        _make_price_data("stale_1h", age_minutes=120),
+    ])
+    mock_client = AsyncMock()
+    mock_client.pipeline = MagicMock(return_value=mock_pipe)
+    mock_aioredis.from_url.return_value = mock_client
+
+    with caplog.at_level(logging.WARNING, logger="redis_cache"):
+        success, missed, errored = await redis_cache_service.get_cached_prices_batch(
+            ["fresh", "stale_30m", "stale_1h"]
+        )
+
+    assert len(success) == 3
+    assert any("stale_30m" in r.message and "30 minutes" in r.message
+               for r in caplog.records if r.levelno == logging.WARNING)
+    assert any("stale_1h" in r.message and "1 hour" in r.message
+               for r in caplog.records if r.levelno == logging.ERROR)
+
+
+@patch("pricing.redis_cache_service.get_redis_url",
+       return_value="redis://192.168.1.252:6379/0")
+@patch("pricing.redis_cache_service.aioredis")
+async def test_batch_invalid_timestamp_isolates_to_one_asset(mock_aioredis, mock_get_url):
+    mock_pipe = _make_mock_pipeline([
+        _make_price_data("eth"),
+        {'usd_price': '50', 'timestamp': 'not-a-date'},
+    ])
+    mock_client = AsyncMock()
+    mock_client.pipeline = MagicMock(return_value=mock_pipe)
+    mock_aioredis.from_url.return_value = mock_client
+
+    success, missed, errored = await redis_cache_service.get_cached_prices_batch(["eth", "bad_ts"])
+    assert "eth" in success
+    assert errored == ["bad_ts"]
