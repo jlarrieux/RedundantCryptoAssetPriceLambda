@@ -5,8 +5,8 @@
 - [x] Add `non_retryable_statuses` parameter to `url_util.open_url_async()` — optional set, default empty. Inside the retry loop exception handler, check if `ClientResponseError.status` is in the set; if so, re-raise immediately without retrying.
 - [x] Update `price_client.py` `__get_asset_price_remote_async()` to pass `non_retryable_statuses={404}` and catch the re-raised `ClientResponseError` to return `None`.
 - [x] Add tests for `url_util.open_url_async` `non_retryable_statuses`: (a) 404 with `{404}` raises immediately without retry, (b) 404 without the parameter retries as before (default behavior preserved), (c) 500 with `{404}` retries normally, (d) connection timeout retries normally.
-- [ ] Add tests for `price_client.py`: (a) single-asset 404 returns `None` in < 3s, (b) batch request uses existing 200 partial-success path (no 404 involved).
-- [ ] Commit and push Cryptofund20xShared to GitHub.
+- [x] Add tests for `price_client.py`: (a) single-asset 404 returns `None` in < 3s, (b) batch request uses existing 200 partial-success path (no 404 involved).
+- [x] Commit and push Cryptofund20xShared to GitHub.
 
 ### PriceService changes
 
@@ -17,7 +17,7 @@
 
 ### Deployment
 
-- [ ] Build and push PriceService Docker image to ECR.
-- [ ] Pip install updated Cryptofund20xShared in Ferengi and Saver repos, rebuild and push their Docker images.
-- [ ] Deploy PriceService, Ferengi, and Saver via Nomad with `--pull-latest`.
-- [ ] Verify in production: check that batch price lookups use pipeline (latency improvement visible in metrics), confirm 404 fast-path works (single asset miss < 3s), verify no regressions in Saver batch cycle, confirm cache misses log at WARNING (not ERROR).
+- [x] Build and push PriceService Docker image to ECR.
+- [x] Pip install updated Cryptofund20xShared in Ferengi and Saver repos, rebuild and push their Docker images.
+- [x] Deploy PriceService, Ferengi, and Saver via Nomad with `--pull-latest`.
+- [x] Verify in production: check that batch price lookups use pipeline (latency improvement visible in metrics), confirm 404 fast-path works (single asset miss < 3s), verify no regressions in Saver batch cycle, confirm cache misses log at WARNING (not ERROR).
