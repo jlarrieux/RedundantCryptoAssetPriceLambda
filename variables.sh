@@ -29,4 +29,4 @@ clean_up_docker() {
   echo "Done pruning all unused containers"
 }
 
-VERSION=1.0.1
+VERSION=1.0.2
