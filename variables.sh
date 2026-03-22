@@ -28,3 +28,5 @@ clean_up_docker() {
 
   echo "Done pruning all unused containers"
 }
+
+VERSION=1.0.0

@@ -7,3 +7,4 @@ aws_ecr_login
 
 # push to aws ecr
 sudo docker push $ECR_URL/$IMAGE_NAME:latest
+echo "Pushed $IMAGE_NAME:latest (version $VERSION)"

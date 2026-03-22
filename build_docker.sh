@@ -2,6 +2,11 @@
 
 source variables.sh
 
+if ! git diff --quiet HEAD 2>/dev/null || ! git diff --cached --quiet HEAD 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
+    echo "ERROR: Working tree has uncommitted changes. Commit or stash before building." >&2
+    exit 1
+fi
+
 # Log in to AWS ECR
 aws_ecr_login
 
@@ -16,6 +21,15 @@ clean_up_docker
 PAT=$(awk -F '[:@]' '{print $3}' ~/.git-credentials)
 
 # Build the Docker image
+NEW_VERSION=$(version-bump "$VERSION")
+sed -i "s/^VERSION=.*/VERSION=$NEW_VERSION/" variables.sh
+VERSION=$NEW_VERSION
+git add variables.sh
+git commit -m "v$VERSION"
+git tag "v$VERSION"
+echo "Tagged v$VERSION"
+
+
 sudo docker build --build-arg GIT_PAT=$PAT -t $IMAGE_NAME .
 
 # Tag the Docker image for AWS ECR
