@@ -53,10 +53,9 @@ class PriceService:
                 if cached_data:
                     self.logger.info(f"Found cached price for {asset}")
                     return cached_data
-                else:
-                    self.logger.error(f"Didn't find price for  {asset} in redis cache")
-                    PRICE_SERVICE_FAILURE.labels('single').inc()
-                    raise ValueError(f"Asset {asset} not found in redis cache")
+                self.logger.debug(f"Asset {asset} not found in redis cache")
+                PRICE_SERVICE_FAILURE.labels('single').inc()
+                return None
             except Exception as e:
                 self.logger.error(f"Error fetching price for {asset}: {str(e)}")
 
