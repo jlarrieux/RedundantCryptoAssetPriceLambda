@@ -29,6 +29,9 @@ FROM public.ecr.aws/docker/library/python:3.10-slim
 
 WORKDIR /app
 
+ARG APP_VERSION=unknown
+LABEL app.version=${APP_VERSION}
+
 # Define ARGs for AWS credentials that will be passed during the build
 ARG AWS_LIGHTSAIL_ACCESS_KEY_ID
 ARG AWS_LIGHTSAIL_SECRET_ACCESS_KEY

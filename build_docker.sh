@@ -30,7 +30,7 @@ git tag "v$VERSION"
 echo "Tagged v$VERSION"
 
 
-sudo docker build --build-arg GIT_PAT=$PAT -t $IMAGE_NAME .
+sudo docker build --build-arg GIT_PAT=$PAT --build-arg APP_VERSION=$VERSION -t $IMAGE_NAME .
 
 # Tag the Docker image for AWS ECR
 sudo docker tag $IMAGE_NAME:latest $ECR_URL/$IMAGE_NAME:latest
