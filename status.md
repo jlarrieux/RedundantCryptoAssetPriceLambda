@@ -44,6 +44,8 @@ the released symbol and reported `PriceService handlers= 1 propagate= False`;
 this proves the live artifact carries the handler guard, rather than relying on
 health checks alone. The release image was pushed as `v1.0.5` (ECR digest
 `sha256:9b82ff8a7333c3b888ebf5ff85084c31292b5b68991ef67b59ea219c73832539`).
+A fresh `/price/weth` request at 19:47:17 UTC produced exactly one `Found cached
+price for weth` document in that allocation's one-second Elasticsearch bucket.
 
 ## Findings & risks
 
