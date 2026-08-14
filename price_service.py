@@ -31,7 +31,7 @@ class PriceService:
             success_dict, missed_assets, errored_assets = await get_cached_prices_batch(assets)
 
             for asset in success_dict:
-                self.logger.info(f"Found cached price for {asset}")
+                self.logger.debug(f"Found cached price for {asset}")
 
             for asset in missed_assets:
                 self.logger.warning(f"Asset {asset} not found in redis cache in batch mode")
@@ -49,11 +49,11 @@ class PriceService:
     async def get_single_price(self, asset: str) -> dict | tuple[None, str]:
         """Get price for a single asset with fallback and error handling."""
         with PRICE_SERVICE_REQUEST_TIME.time():
-            self.logger.info(f"Fetching single price for {asset}")
+            self.logger.debug(f"Fetching single price for {asset}")
             try:
                 cached_data = await redis_cache_service.get_cached_price_async(asset)
                 if cached_data:
-                    self.logger.info(f"Found cached price for {asset}")
+                    self.logger.debug(f"Found cached price for {asset}")
                     return cached_data
                 self.logger.debug(f"Asset {asset} not found in redis cache")
                 PRICE_SERVICE_FAILURE.labels('single').inc()

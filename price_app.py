@@ -86,7 +86,7 @@ async def transform_asset():
         return jsonify({"error": "No asset specified"}), 400
 
     try:
-        logger.info(f"Transforming asset {asset}")
+        logger.debug(f"Transforming asset {asset}")
         transformed_asset = transformer.transform_asset(asset)
         REQUEST_LATENCY.labels(endpoint="transform-asset", type="transformed").observe(time.time() - start_time)
         CURRENT_REQUESTS.dec()
@@ -121,7 +121,7 @@ async def price_single(asset: str):
     CURRENT_REQUESTS.inc()
 
     try:
-        logger.info(f"Fetching price for asset: {asset}")
+        logger.debug(f"Fetching price for asset: {asset}")
         price_exec = PriceService()
         result = await price_exec.get_single_price(asset)
 
@@ -182,7 +182,7 @@ async def price_multiple():
             ERROR_COUNT.labels(endpoint="price_multiple", error_type="empty_list").inc()
             CURRENT_REQUESTS.dec()
             return jsonify({"error": "Asset list cannot be empty"}), 400
-        logger.info(f"Fetching prices for assets: {asset_list}")
+        logger.debug(f"Fetching prices for assets: {asset_list}")
         price_exec = PriceService()
         result = await price_exec.get_prices(asset_list)
 
