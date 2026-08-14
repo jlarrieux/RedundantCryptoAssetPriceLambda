@@ -1,6 +1,6 @@
 # PriceService — Project Status
 
-**Last updated:** 2026-08-14 (logger-handler hotfix deployed and Akasha task closed)
+**Last updated:** 2026-08-14 (logger-handler hotfix live verification recorded)
 **Anchor:** main @ 95d7e3a
 **Status:** active
 
