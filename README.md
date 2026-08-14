@@ -22,4 +22,8 @@ logger is therefore configured defensively: construction keeps one local stream
 handler and disables propagation, preventing repeated requests from multiplying
 each log event.
 
+High-frequency successful-request narration is logged at DEBUG. Warnings and
+errors remain at their existing levels, while Prometheus request metrics retain
+production-facing observability without creating one INFO event per cache hit.
+
 Current project state and deployment evidence are maintained in [status.md](status.md).

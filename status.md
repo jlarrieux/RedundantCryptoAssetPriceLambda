@@ -1,6 +1,6 @@
 # PriceService — Project Status
 
-**Last updated:** 2026-08-14 (logger-handler hotfix live verification recorded)
+**Last updated:** 2026-08-14 (INFO-log demotion hotfix prepared for release)
 **Anchor:** main @ 95d7e3a
 **Status:** active
 
@@ -12,29 +12,33 @@
 | --- | --- |
 | Service health | 25/25 Nomad allocations healthy (2026-08-14) |
 | Current deployment | Job version 33, image release v1.0.5 |
-| Latest change | Prevents repeated `PriceService()` construction from accumulating logger handlers |
-| Verification | 20 local tests passed; live canary and full rollout passed |
-| Top risk | Per-request INFO log volume remains separately tracked in Akasha |
+| Latest change | Demotes six hot-path narrative messages from INFO to DEBUG |
+| Verification | 22 local tests passed; Talit reviewer and director approved commit `276e32c` |
+| Top risk | Payload-rich PricePopulator INFO logs remain a separate source-volume concern |
 
 ## What this project is
 
 PriceService provides cached cryptocurrency prices. The authoritative definition
-of done was [Akasha task "Fix PriceService logger handler accumulation"](http://192.168.1.252:8686/api/items/6a7b83caef91c58a292e2e90) in the Cryptofund20x project.
+of done for this release is [Akasha task "PriceService: demote per-request INFO logs
+to DEBUG"](http://192.168.1.252:8686/api/items/69d97ed3df08d2f1594f0251) in the
+Cryptofund20x project.
 
 ## Completed stage
 
-The 2026-08-14 handler-accumulation hotfix is deployed. The named logger now has one process-local handler across repeated service construction.
+The 2026-08-14 hotfix commit `276e32c` changes six successful-request narratives
+to DEBUG while preserving warnings, errors, metrics, and request behavior. It is
+awaiting the Overlord-owned release and deployment verification.
 
 ## Next tasks
 
-- Review the separate PriceService INFO-log demotion tasks in Akasha.
+- Monitor the deployed source-volume reduction after release.
+- Decide whether a separate PricePopulator payload-log demotion task is warranted.
 
 ## Work ledger
 
-As checked on 2026-08-14, the Cryptofund20x project had six open tasks before
-this closeout. This handler-accumulation task and its PricePopulator twin are
-the completed pair; the distinct INFO-demotion, debug-print-removal, alerting,
-and unrelated Convex tasks remain open. There are no blocking edges on this task.
+The task is active in Talit change `chg_priceservice_002`. It supersedes the
+overlapping narrower cache-hit-demotion work within one PriceService change; its
+related handler-accumulation task is already done. There are no blocking edges.
 
 ## Live state
 
@@ -49,9 +53,9 @@ price for weth` document in that allocation's one-second Elasticsearch bucket.
 
 ## Findings & risks
 
-The handler multiplier is closed since this revision. Per-request INFO volume is
-still a separate source-volume concern and remains tracked by the open Akasha
-demotion tasks.
+The handler multiplier is closed. This release removes the PriceService
+per-request INFO floor but does not address payload-rich PricePopulator logs,
+debug `print()` calls, or log-volume alerting.
 
 ## How to update this document
 
