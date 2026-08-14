@@ -19,9 +19,11 @@ class PriceService:
     def __init__(self):
         # Setup logging
         self.logger = logging.getLogger("PriceService")
-        handler = logging.StreamHandler()
-        handler.setFormatter(CustomFormatter())
-        self.logger.addHandler(handler)
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(CustomFormatter())
+            self.logger.addHandler(handler)
+        self.logger.propagate = False
 
     async def get_prices(self, assets: List[str]) -> tuple[dict[str, dict], list[str]]:
         """Get prices for a list of assets using Redis pipeline."""
