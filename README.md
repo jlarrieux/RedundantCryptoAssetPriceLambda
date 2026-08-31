@@ -26,4 +26,16 @@ High-frequency successful-request narration is logged at DEBUG. Warnings and
 errors remain at their existing levels, while Prometheus request metrics retain
 production-facing observability without creating one INFO event per cache hit.
 
+## Known-unresolvable assets
+
+`price_service.py`'s `KNOWN_UNRESOLVABLE_ASSETS` frozenset (`btrfly`, `cnc`,
+`dpx`, `jpeg`, `rdpx`) names symbols confirmed permanently absent from
+CoinGecko's coin list. A single-price cache miss for one of these logs a
+warning and returns `None` exactly as any other miss does, but does not
+increment `price_service_complete_batch_failures_total{type="single"}` — these
+assets will never populate the cache, so counting their misses as failures
+only produced a persistent, misleading alert signal. Any other symbol's miss
+still increments the counter normally; this is a fixed allowlist, not a
+general miss-suppression path.
+
 Current project state and deployment evidence are maintained in [status.md](status.md).

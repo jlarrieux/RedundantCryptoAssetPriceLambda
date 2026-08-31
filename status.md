@@ -1,7 +1,7 @@
 # PriceService — Project Status
 
-**Last updated:** 2026-08-14 (INFO-log demotion hotfix deployed and verified)
-**Anchor:** main @ 0062571
+**Last updated:** 2026-08-31 (chg_pricepopulator_006 known-unresolvable classification, deployed and live-verified)
+**Anchor:** main @ ea0af35
 **Status:** active
 
 > Descriptive, not normative. Specs/ADRs/README/Akasha win on conflict; disagreement means THIS file is stale.
@@ -10,29 +10,42 @@
 
 | Question | Current state |
 | --- | --- |
-| Service health | 25/25 Nomad allocations healthy (2026-08-14) |
-| Current deployment | Job version 34, image release v1.0.6 |
-| Latest change | Six hot-path narrative messages demoted from INFO to DEBUG |
-| Verification | 22 tests passed; fresh allocation source and live `/price/weth` verified |
-| Top risk | Payload-rich PricePopulator INFO logs remain a separate source-volume concern |
+| Service health | 25/25 Nomad allocations healthy after canary promotion (2026-08-31) |
+| Current deployment | Job version 36, image release v1.0.7 |
+| Latest change | Added `KNOWN_UNRESOLVABLE_ASSETS` allowlist (btrfly/cnc/dpx/jpeg/rdpx); a single-price miss on these no longer increments `price_service_complete_batch_failures_total{type="single"}` |
+| Verification | 24 tests passed; live: 3 real HTTP requests (2 known-unresolvable, 1 genuinely unexpected symbol) produced exactly 1 counter increment |
+| Top risk | None for this change — an unrelated symbol's miss was independently confirmed to still increment the counter, so this does not create a blanket miss-suppression hole |
 
 ## What this project is
 
 PriceService provides cached cryptocurrency prices. The authoritative definition
-of done for this release is [Akasha task "PriceService: demote per-request INFO logs
-to DEBUG"](http://192.168.1.252:8686/api/items/69d97ed3df08d2f1594f0251) in the
-Cryptofund20x project.
+of done for the most recent change is [Akasha task
+"PricePopulator/Ferengi: suppress persistent-failure alerting for
+CoinGecko-delisted assets"](http://192.168.1.252:8686/api/items/6a95acef868bdef65eec6244)
+in the Cryptofund20x project.
 
 ## Completed stage
 
-The 2026-08-14 hotfix commit `276e32c` changes six successful-request narratives
-to DEBUG while preserving warnings, errors, metrics, and request behavior. Release
-`v1.0.6` is deployed and live-verified.
+The 2026-08-31 hotfix (Talit `chg_pricepopulator_006`, commit `ea0af35`) added a
+5-symbol `KNOWN_UNRESOLVABLE_ASSETS` frozenset to `price_service.py`. A
+single-price cache miss for `btrfly`/`cnc`/`dpx`/`jpeg`/`rdpx` — all confirmed
+permanently delisted from CoinGecko — now logs a warning instead of
+incrementing the failure counter; every other symbol's miss still increments
+exactly as before. Release `v1.0.7` is deployed (job version 36, all 25
+allocations healthy) and live-verified: the deployed container's
+`price_service.py` was read directly and confirmed to contain the allowlist
+before promotion, and a live before/after metrics scrape across three real
+requests confirmed the counter behavior end to end, not just in unit tests.
+
+The prior `69d97ed3df08d2f1594f0251` (INFO-log demotion) remains done and
+unaffected by this change.
 
 ## Next tasks
 
-- Monitor the source-volume reduction over normal traffic.
-- Re-scope and re-size the remaining PricePopulator payload-log demotion slice.
+- Monitor the source-volume reduction over normal traffic (carried over,
+  unaffected by this change).
+- Re-scope and re-size the remaining PricePopulator payload-log demotion slice
+  (carried over, unaffected by this change).
 
 ## Work ledger
 
@@ -40,6 +53,14 @@ Akasha task `69d97ed3df08d2f1594f0251` is done through Talit change
 `chg_priceservice_002`. The overlapping cache-hit task was reconciled so it cannot
 reopen PriceService work; its remaining candidate scope is PricePopulator only.
 The related handler-accumulation task is already done. There are no blocking edges.
+
+Akasha task `6a95acef868bdef65eec6244` is done through Talit hotfix
+`chg_pricepopulator_006` (2026-08-31), run against PricePopulator as the
+instantiation repo with this repo touched as an authorized cross-repo dependency
+(the failure counter this task fixes is defined here, not in PricePopulator).
+Split from a Red-sized parent (`6a8afa8bf34fb84c8cd9a39d`) the same day; the
+sibling task (`6a95acd3868bdef65eec6243`, mapping fixes for lyra/xgrail/
+stake_dao/ndx) does not touch this repo.
 
 ## Live state
 
@@ -53,11 +74,28 @@ A live `/price/weth` request returned WETH price data, and Elasticsearch found z
 former hot-path message documents for that fresh allocation (verification window:
 allocation start through 2026-08-14 20:38 UTC).
 
+**Update 2026-08-31:** job version 36 deployed via canary (all 25 allocations
+converged, old version-35 allocations stopped). ECR digest
+`sha256:b5b7e11cbada350e5407c5fb6081e98e06182960def469079b16a0b2f887d877`. The
+canary allocation's `/app/price_service.py` was read directly via
+`nomad alloc exec` and confirmed to contain `KNOWN_UNRESOLVABLE_ASSETS` before
+promotion. Post-promotion, a live metrics scrape before and after three real
+`/price/<asset>` requests (`btrfly`, `jpeg`, and a fabricated unmapped symbol)
+showed `price_service_complete_batch_failures_total{type="single"}` incremented
+by exactly 1 — the two known-unresolvable requests did not increment it, the
+genuinely unexpected one did. This was also added `force_pull = true` to the
+live Nomad job spec (previously unset; PricePopulator's own job already had it)
+to make future `:latest` redeploys of this job reliable.
+
 ## Findings & risks
 
 The handler multiplier is closed. This release removes the PriceService
 per-request INFO floor but does not address payload-rich PricePopulator logs,
-debug `print()` calls, or log-volume alerting.
+debug `print()` calls, or log-volume alerting. Separately, the 2026-08-31
+change confirmed a batch-path failure counter (`PRICE_SERVICE_FAILURE.labels
+('batch').inc()`, incremented only on genuine Redis pipeline errors, not on
+missed_assets) was never subject to the same inflation this fix addresses —
+verified by reading `get_cached_prices_batch()` directly, not assumed.
 
 ## How to update this document
 
