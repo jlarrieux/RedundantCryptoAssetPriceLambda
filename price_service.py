@@ -14,6 +14,13 @@ PRICE_SERVICE_FAILURE = Counter('price_service_complete_batch_failures_total',
 PRICE_SERVICE_REQUEST_TIME = Histogram('price_service_request_duration_seconds',
                                        'Time spent processing complete request')
 
+# These assets are permanently unresolvable on CoinGecko. They remain valid
+# caller inputs, but expected cache misses must not inflate the unexpected-
+# failure signal.
+KNOWN_UNRESOLVABLE_ASSETS = frozenset({
+    'btrfly', 'cnc', 'dpx', 'jpeg', 'rdpx',
+})
+
 
 class PriceService:
     def __init__(self):
@@ -56,7 +63,12 @@ class PriceService:
                     self.logger.debug(f"Found cached price for {asset}")
                     return cached_data
                 self.logger.debug(f"Asset {asset} not found in redis cache")
-                PRICE_SERVICE_FAILURE.labels('single').inc()
+                if asset in KNOWN_UNRESOLVABLE_ASSETS:
+                    self.logger.warning(
+                        f"Known unresolvable asset {asset} missed in redis cache"
+                    )
+                else:
+                    PRICE_SERVICE_FAILURE.labels('single').inc()
                 return None
             except Exception as e:
                 self.logger.error(f"Error fetching price for {asset}: {str(e)}")

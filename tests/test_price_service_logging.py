@@ -66,6 +66,50 @@ async def test_price_service_hot_path_messages_are_debug(monkeypatch, logger):
 
 
 @pytest.mark.asyncio
+async def test_known_unresolvable_single_miss_does_not_increment_failure(
+    monkeypatch,
+):
+    service = PriceService()
+    monkeypatch.setattr(
+        price_service.redis_cache_service,
+        "get_cached_price_async",
+        AsyncMock(return_value=None),
+    )
+    increment = Mock()
+    monkeypatch.setattr(
+        price_service.PRICE_SERVICE_FAILURE,
+        "labels",
+        Mock(return_value=Mock(inc=increment)),
+    )
+
+    result = await service.get_single_price("jpeg")
+
+    assert result is None
+    increment.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_unexpected_single_miss_still_increments_failure(monkeypatch):
+    service = PriceService()
+    monkeypatch.setattr(
+        price_service.redis_cache_service,
+        "get_cached_price_async",
+        AsyncMock(return_value=None),
+    )
+    increment = Mock()
+    monkeypatch.setattr(
+        price_service.PRICE_SERVICE_FAILURE,
+        "labels",
+        Mock(return_value=Mock(inc=increment)),
+    )
+
+    result = await service.get_single_price("unexpected-token")
+
+    assert result is None
+    increment.assert_called_once_with()
+
+
+@pytest.mark.asyncio
 async def test_price_app_hot_path_messages_are_debug_and_errors_are_unchanged(
     monkeypatch,
 ):
