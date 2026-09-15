@@ -29,6 +29,12 @@ git commit -m "v$VERSION"
 git tag "v$VERSION"
 echo "Tagged v$VERSION"
 
+if ! git push origin main; then
+    echo "WARNING: Failed to push main to origin; continuing with the build." >&2
+fi
+if ! git push origin --tags; then
+    echo "WARNING: Failed to push tags to origin; continuing with the build." >&2
+fi
 
 sudo docker build --build-arg GIT_PAT=$PAT --build-arg APP_VERSION=$VERSION -t $IMAGE_NAME .
 
