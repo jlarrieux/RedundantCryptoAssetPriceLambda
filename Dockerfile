@@ -2,12 +2,10 @@
 # Use a full python image that includes build tools
 FROM public.ecr.aws/docker/library/python:3.10-bookworm as builder
 
-# Set build-time argument for the Git PAT. This will NOT be in the final image.
-ARG GIT_PAT
-
-# Install git and configure it to use the PAT for private repos
-RUN apt-get update && apt-get install -y git && apt-get clean && \
-    git config --global url."https://${GIT_PAT}@github.com/".insteadOf "https://github.com/"
+# Install git and configure it to use the build-time secret for private repos
+RUN --mount=type=secret,id=git_pat \
+    apt-get update && apt-get install -y git && apt-get clean && \
+    git config --global url."https://$(cat /run/secrets/git_pat)@github.com/".insteadOf "https://github.com/"
 
 WORKDIR /app
 
@@ -32,14 +30,7 @@ WORKDIR /app
 ARG APP_VERSION=unknown
 LABEL app.version=${APP_VERSION}
 
-# Define ARGs for AWS credentials that will be passed during the build
-ARG AWS_LIGHTSAIL_ACCESS_KEY_ID
-ARG AWS_LIGHTSAIL_SECRET_ACCESS_KEY
-
-# Set ENV variables in the final image so your application can use them at runtime
 # Set PYTHONPATH to ensure Python can find your local modules.
-ENV AWS_ACCESS_KEY_ID=${AWS_LIGHTSAIL_ACCESS_KEY_ID}
-ENV AWS_SECRET_ACCESS_KEY=${AWS_LIGHTSAIL_SECRET_ACCESS_KEY}
 ENV PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
 ENV PYTHONPATH /app
 

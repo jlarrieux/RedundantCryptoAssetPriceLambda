@@ -19,6 +19,7 @@ clean_up_docker
 
 # Get personal access token that is saved in git-credentials
 PAT=$(awk -F '[:@]' '{print $3}' ~/.git-credentials)
+export PAT
 
 # Build the Docker image
 NEW_VERSION=$(version-bump "$VERSION")
@@ -36,7 +37,7 @@ if ! git push origin --tags; then
     echo "WARNING: Failed to push tags to origin; continuing with the build." >&2
 fi
 
-sudo docker build --build-arg GIT_PAT=$PAT --build-arg APP_VERSION=$VERSION -t $IMAGE_NAME .
+sudo --preserve-env=PAT docker build --secret id=git_pat,env=PAT --build-arg APP_VERSION=$VERSION -t $IMAGE_NAME .
 
 # Tag the Docker image for AWS ECR
 sudo docker tag $IMAGE_NAME:latest $ECR_URL/$IMAGE_NAME:latest
