@@ -109,7 +109,7 @@ async def price_single(asset: str):
 
     # Extract trace context from incoming HTTP headers
     request_headers_dict = dict(request.headers)
-    print(f"[DEBUG price_app /price] Request headers: {request_headers_dict}")
+    logger.debug(f"Request headers for /price: {request_headers_dict}")
 
     # Extract trace context from HTTP headers
     # extract_trace_context handles header normalization internally
@@ -157,7 +157,7 @@ async def price_multiple():
     """Fetch prices for multiple assets."""
     # Extract trace context from incoming HTTP headers
     request_headers_dict = dict(request.headers)
-    print(f"[DEBUG price_app /prices] Request headers: {request_headers_dict}")
+    logger.debug(f"Request headers for /prices: {request_headers_dict}")
 
     # Extract trace context from HTTP headers
     # extract_trace_context handles header normalization internally

@@ -140,10 +140,10 @@ async def test_price_app_hot_path_messages_are_debug_and_errors_are_unchanged(
     assert (await client.get("/transform-asset")).status_code == 400
     assert (await client.get("/price/%20")).status_code == 400
 
-    assert debug.call_args_list == [
-        (("Transforming asset BTC",),),
-        (("Fetching price for asset: btc",),),
-        (("Fetching prices for assets: ['btc', 'eth']",),),
-    ]
+    assert debug.call_args_list[0] == (("Transforming asset BTC",),)
+    assert debug.call_args_list[1].args[0].startswith("Request headers for /price: ")
+    assert debug.call_args_list[2] == (("Fetching price for asset: btc",),)
+    assert debug.call_args_list[3].args[0].startswith("Request headers for /prices: ")
+    assert debug.call_args_list[4] == (("Fetching prices for assets: ['btc', 'eth']",),)
     error.assert_called_once_with("No asset specified")
     warning.assert_called_once_with("Empty or invalid asset provided.")
