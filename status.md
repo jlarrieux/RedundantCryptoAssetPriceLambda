@@ -1,7 +1,7 @@
 # PriceService — Project Status
 
-**Last updated:** 2026-09-15 (chg_priceservice_004 deployed — v1.0.8 live, Nomad job version 37, once server1's DNS issue was fixed; see Completed stage)
-**Anchor:** main @ 171b1f3 (v1.0.8, deployed 2026-09-15, Nomad job version 37, healthy)
+**Last updated:** 2026-09-15 (chg_priceservice_005 — GitHub PAT switched to a BuildKit secret mount, dead AWS Lightsail credential declarations deleted; deployed, Nomad job version 38; see Completed stage)
+**Anchor:** main @ 8c26fe7 (v1.0.9, deployed 2026-09-15, Nomad job version 38, healthy)
 **Status:** active
 
 > Descriptive, not normative. Specs/ADRs/README/Akasha win on conflict; disagreement means THIS file is stale.
@@ -32,7 +32,9 @@ in the Cryptofund20x project.
 
 **Deployed 2026-09-15** (Nomad job version 37, healthy) once server1's DNS issue was root-caused and fixed (Ferengi's `status.md`, Akasha `6aa896da41aedd9912183b8b`). No functional difference from v1.0.7: this change touches only `build_docker.sh`, zero application code.
 
-**Adjacent discoveries, not fixed here — flagged for the fleet-wide derived-items reconciliation at the end of this 5-repo pass:** this repo's `Dockerfile` still uses the unfixed `ARG GIT_PAT`/`git config --global` pattern (confined to a discarded multi-stage builder stage, so lower severity than PricePopulator's now-fixed single-stage case) and unfixed `ARG`/`ENV` AWS Lightsail credential declarations (same pattern already fixed in Saver via runtime injection). Neither was in scope for this change.
+**GitHub PAT/AWS credential build-args fixed (2026-09-15, `chg_priceservice_005`, Talit hotfix, genuine dual LGTM round 1, auto-merged; commit `8c26fe7`).** Closes the PriceService slice of `6aa8add341aedd9912183b93`. `Dockerfile`'s builder stage switched from a plain `ARG GIT_PAT` to a BuildKit `--secret id=git_pat,env=PAT` mount (already-multi-stage build meant no temp-file trick was needed, unlike PricePopulator's single-stage case). `ARG AWS_LIGHTSAIL_ACCESS_KEY_ID`/`ARG AWS_LIGHTSAIL_SECRET_ACCESS_KEY`/`ENV AWS_ACCESS_KEY_ID`/`ENV AWS_SECRET_ACCESS_KEY` deleted outright — confirmed dead (zero `boto3`/AWS usage anywhere in this codebase). `build_docker.sh` now `export`s `PAT` and builds with `sudo --preserve-env=PAT docker build --secret id=git_pat,env=PAT`.
+
+Built image independently confirmed secret-free via safe length/grep-count checks only (`Config.Env`, `docker history`) — zero `SecretsUsedInArgOrEnv` warnings from `docker build` itself, down from 4. Full suite: 24 passed, 0 regressions. Deployed v1.0.9, Nomad job version 38, healthy.
 
 The 2026-08-31 hotfix (Talit `chg_pricepopulator_006`, commit `ea0af35`) added a
 5-symbol `KNOWN_UNRESOLVABLE_ASSETS` frozenset to `price_service.py`. A
