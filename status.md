@@ -1,7 +1,7 @@
 # PriceService — Project Status
 
-**Last updated:** 2026-09-14 (chg_priceservice_004 — build_docker.sh now pushes commits/tags to origin during build, catching up 7 historical unpushed tags; image built and pushed to ECR, deploy blocked by a known server1 DNS issue; see Completed stage)
-**Anchor:** main @ 171b1f3 (v1.0.8 built and pushed to ECR, not yet deployed)
+**Last updated:** 2026-09-15 (chg_priceservice_004 deployed — v1.0.8 live, Nomad job version 37, once server1's DNS issue was fixed; see Completed stage)
+**Anchor:** main @ 171b1f3 (v1.0.8, deployed 2026-09-15, Nomad job version 37, healthy)
 **Status:** active
 
 > Descriptive, not normative. Specs/ADRs/README/Akasha win on conflict; disagreement means THIS file is stale.
@@ -30,7 +30,7 @@ in the Cryptofund20x project.
 
 **All 7 historical tags** (`v1.0.1`-`v1.0.7` — this repo's entire tag history) were missing from `origin` before this fix, confirmed via `git ls-remote --tags`. Running the real `./build_docker.sh` caught up every one as a side effect of the new unconditional `--tags` push, alongside the new `v1.0.8` tag. Full suite independently re-run: 24 passed, 0 regressions.
 
-**Deployment blocked by the already-tracked server1 DNS issue** (Ferengi's `status.md`, Akasha `6aa896da41aedd9912183b8b`) — image v1.0.8 built and pushed to ECR successfully, but a deploy from server1 would fail the same way it did for the sibling repos' own deploys today. No functional difference: this change touches only `build_docker.sh`, zero application code.
+**Deployed 2026-09-15** (Nomad job version 37, healthy) once server1's DNS issue was root-caused and fixed (Ferengi's `status.md`, Akasha `6aa896da41aedd9912183b8b`). No functional difference from v1.0.7: this change touches only `build_docker.sh`, zero application code.
 
 **Adjacent discoveries, not fixed here — flagged for the fleet-wide derived-items reconciliation at the end of this 5-repo pass:** this repo's `Dockerfile` still uses the unfixed `ARG GIT_PAT`/`git config --global` pattern (confined to a discarded multi-stage builder stage, so lower severity than PricePopulator's now-fixed single-stage case) and unfixed `ARG`/`ENV` AWS Lightsail credential declarations (same pattern already fixed in Saver via runtime injection). Neither was in scope for this change.
 
