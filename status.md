@@ -1,7 +1,7 @@
 # PriceService — Project Status
 
-**Last updated:** 2026-08-31 (chg_pricepopulator_006 known-unresolvable classification, deployed and live-verified)
-**Anchor:** main @ ea0af35
+**Last updated:** 2026-09-14 (chg_priceservice_004 — build_docker.sh now pushes commits/tags to origin during build, catching up 7 historical unpushed tags; image built and pushed to ECR, deploy blocked by a known server1 DNS issue; see Completed stage)
+**Anchor:** main @ 171b1f3 (v1.0.8 built and pushed to ECR, not yet deployed)
 **Status:** active
 
 > Descriptive, not normative. Specs/ADRs/README/Akasha win on conflict; disagreement means THIS file is stale.
@@ -25,6 +25,14 @@ CoinGecko-delisted assets"](http://192.168.1.252:8686/api/items/6a95acef868bdef6
 in the Cryptofund20x project.
 
 ## Completed stage
+
+**Release-path git push gap fixed (2026-09-14, `chg_priceservice_004`, Talit hotfix, genuine dual LGTM round 1, auto-merged; commit `171b1f3`).** Closes the PriceService slice of the fleet-wide consolidated task `6aa896cd41aedd9912183b8a`, applying the exact fix already proven in Ferengi/Saver/PricePopulator: `build_docker.sh` committed and tagged version bumps entirely locally, with no push step anywhere in the release path. Now runs `git push origin main` and `git push origin --tags` immediately after the local commit/tag step, warning and continuing on failure rather than aborting the build.
+
+**All 7 historical tags** (`v1.0.1`-`v1.0.7` — this repo's entire tag history) were missing from `origin` before this fix, confirmed via `git ls-remote --tags`. Running the real `./build_docker.sh` caught up every one as a side effect of the new unconditional `--tags` push, alongside the new `v1.0.8` tag. Full suite independently re-run: 24 passed, 0 regressions.
+
+**Deployment blocked by the already-tracked server1 DNS issue** (Ferengi's `status.md`, Akasha `6aa896da41aedd9912183b8b`) — image v1.0.8 built and pushed to ECR successfully, but a deploy from server1 would fail the same way it did for the sibling repos' own deploys today. No functional difference: this change touches only `build_docker.sh`, zero application code.
+
+**Adjacent discoveries, not fixed here — flagged for the fleet-wide derived-items reconciliation at the end of this 5-repo pass:** this repo's `Dockerfile` still uses the unfixed `ARG GIT_PAT`/`git config --global` pattern (confined to a discarded multi-stage builder stage, so lower severity than PricePopulator's now-fixed single-stage case) and unfixed `ARG`/`ENV` AWS Lightsail credential declarations (same pattern already fixed in Saver via runtime injection). Neither was in scope for this change.
 
 The 2026-08-31 hotfix (Talit `chg_pricepopulator_006`, commit `ea0af35`) added a
 5-symbol `KNOWN_UNRESOLVABLE_ASSETS` frozenset to `price_service.py`. A
