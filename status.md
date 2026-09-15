@@ -1,7 +1,7 @@
 # PriceService — Project Status
 
-**Last updated:** 2026-09-15 (chg_priceservice_005 — GitHub PAT switched to a BuildKit secret mount, dead AWS Lightsail credential declarations deleted; deployed, Nomad job version 38; see Completed stage)
-**Anchor:** main @ 8c26fe7 (v1.0.9, deployed 2026-09-15, Nomad job version 38, healthy)
+**Last updated:** 2026-09-15 (chg_priceservice_006 — debug print() statements converted to logger.debug(), no longer bypassing log-level filtering; deployed, Nomad job version 39; see Completed stage)
+**Anchor:** main @ cef50da (v1.0.10, deployed 2026-09-15, Nomad job version 39, healthy)
 **Status:** active
 
 > Descriptive, not normative. Specs/ADRs/README/Akasha win on conflict; disagreement means THIS file is stale.
@@ -10,11 +10,11 @@
 
 | Question | Current state |
 | --- | --- |
-| Service health | 25/25 Nomad allocations healthy after canary promotion (2026-08-31) |
-| Current deployment | Job version 36, image release v1.0.7 |
-| Latest change | Added `KNOWN_UNRESOLVABLE_ASSETS` allowlist (btrfly/cnc/dpx/jpeg/rdpx); a single-price miss on these no longer increments `price_service_complete_batch_failures_total{type="single"}` |
-| Verification | 24 tests passed; live: 3 real HTTP requests (2 known-unresolvable, 1 genuinely unexpected symbol) produced exactly 1 counter increment |
-| Top risk | None for this change — an unrelated symbol's miss was independently confirmed to still increment the counter, so this does not create a blanket miss-suppression hole |
+| Service health | 4/4 Nomad allocations healthy (job version 39) |
+| Current deployment | v1.0.10, digest `sha256:650e82215d0ed9378de3f0d718bb951a2f74f534e4a319cf845c7a75e95bc44e` |
+| Latest change | Converted two leftover debug `print()` statements in `/price` and `/prices` to `logger.debug(...)` — they now respect log-level filtering and flow through the structured `CustomFormatter`/`TraceContextFilter` pipeline instead of unconditionally spamming stdout (and Filebeat/Elasticsearch) on every request. |
+| Verification | 24 tests passed (including an updated assertion on the exact `logger.debug` call sequence); live-verified post-deploy: 0 occurrences of the old raw `[DEBUG price_app` pattern in a real allocation's logs, alongside genuine production traffic. |
+| Top risk | None for this change. |
 
 ## What this project is
 
@@ -25,6 +25,10 @@ CoinGecko-delisted assets"](http://192.168.1.252:8686/api/items/6a95acef868bdef6
 in the Cryptofund20x project.
 
 ## Completed stage
+
+**Debug `print()` statements converted to `logger.debug()` (2026-09-15, `chg_priceservice_006`, Talit hotfix, genuine dual LGTM round 1, auto-merged; commit `cef50da`).** Closes Akasha `69d97ee0df08d2f1594f0252`. Two leftover debug statements in `/price` and `/prices` dumped full request headers to stdout on every request, unconditionally — bypassing this file's own `CustomFormatter`/`TraceContextFilter` logging pipeline and its `INFO`-level gate entirely, so Filebeat shipped the resulting spam to Elasticsearch regardless of configured verbosity.
+
+Converted to `logger.debug(...)`, matching the pattern already used elsewhere in the same handlers — silent by default at the configured `INFO` level, available on demand at `DEBUG`, and structured/trace-correlated like every other log line when it does fire. An existing test asserting the exact `logger.debug` call sequence was updated to account for the two new debug calls now appearing in it. Full suite: 24 passed, 0 regressions. Deployed v1.0.10, Nomad job version 39; live-verified post-deploy that the old raw `[DEBUG price_app` pattern no longer appears in a real allocation's logs, alongside genuine production traffic (`/prices?assets=weth,usdc` from Saver's own polling cycle).
 
 **Release-path git push gap fixed (2026-09-14, `chg_priceservice_004`, Talit hotfix, genuine dual LGTM round 1, auto-merged; commit `171b1f3`).** Closes the PriceService slice of the fleet-wide consolidated task `6aa896cd41aedd9912183b8a`, applying the exact fix already proven in Ferengi/Saver/PricePopulator: `build_docker.sh` committed and tagged version bumps entirely locally, with no push step anywhere in the release path. Now runs `git push origin main` and `git push origin --tags` immediately after the local commit/tag step, warning and continuing on failure rather than aborting the build.
 
