@@ -55,7 +55,7 @@ The `/prices` endpoint SHALL continue to return `{"prices": [success_dict, faile
 - **AND** HTTP status is 200
 
 ### Requirement: Cache misses and errors SHALL have distinct log levels
-Cache misses SHALL be logged at WARNING level. Redis errors (per-command or pipeline-level) SHALL be logged at ERROR level and increment the `price_service_complete_batch_failures_total` counter.
+Cache misses SHALL be logged at WARNING level. Redis errors (per-command or pipeline-level) SHALL be logged at ERROR level and increment the `price_service_batch_redis_errors_total` counter.
 
 #### Scenario: Cache miss logging
 - **WHEN** an asset is not found in Redis (empty HGETALL)
@@ -63,7 +63,7 @@ Cache misses SHALL be logged at WARNING level. Redis errors (per-command or pipe
 
 #### Scenario: Redis error logging
 - **WHEN** a Redis error occurs (per-command or pipeline-level)
-- **THEN** an ERROR log is emitted and `price_service_complete_batch_failures_total` counter is incremented
+- **THEN** an ERROR log is emitted and `price_service_batch_redis_errors_total` counter is incremented
 
 ### Requirement: Batch function SHALL preserve timestamp staleness validation
 The `get_cached_prices_batch()` function SHALL apply the same timestamp age checks as `get_cached_price_async()`: log WARNING when a cached entry is older than 30 minutes, log ERROR when older than 1 hour. These checks SHALL run per-asset on the pipeline results.
@@ -82,4 +82,3 @@ The `/price/<asset>` endpoint and `get_single_price()` method SHALL continue usi
 #### Scenario: Single asset request unchanged
 - **WHEN** a client calls `GET /price/eth`
 - **THEN** the request uses the existing single-asset code path, not the pipeline batch function
-

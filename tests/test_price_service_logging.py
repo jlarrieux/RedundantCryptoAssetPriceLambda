@@ -47,6 +47,12 @@ async def test_price_service_hot_path_messages_are_debug(monkeypatch, logger):
         "get_cached_price_async",
         AsyncMock(return_value={"usd_price": 1}),
     )
+    batch_increment = Mock()
+    monkeypatch.setattr(
+        price_service.PRICE_SERVICE_BATCH_REDIS_ERRORS,
+        "inc",
+        batch_increment,
+    )
 
     await service.get_prices(["btc", "eth", "sol"])
     await service.get_single_price("btc")
@@ -63,6 +69,18 @@ async def test_price_service_hot_path_messages_are_debug(monkeypatch, logger):
     service.logger.error.assert_called_once_with(
         "Redis errors for assets in batch mode: ['sol']"
     )
+    batch_increment.assert_called_once_with()
+
+
+def test_price_service_failure_metrics_have_unambiguous_names():
+    assert (
+        price_service.PRICE_SERVICE_BATCH_REDIS_ERRORS._name
+        == "price_service_batch_redis_errors"
+    )
+    assert (
+        price_service.PRICE_SERVICE_SINGLE_CACHE_MISSES._name
+        == "price_service_single_cache_miss"
+    )
 
 
 @pytest.mark.asyncio
@@ -77,9 +95,9 @@ async def test_known_unresolvable_single_miss_does_not_increment_failure(
     )
     increment = Mock()
     monkeypatch.setattr(
-        price_service.PRICE_SERVICE_FAILURE,
-        "labels",
-        Mock(return_value=Mock(inc=increment)),
+        price_service.PRICE_SERVICE_SINGLE_CACHE_MISSES,
+        "inc",
+        increment,
     )
 
     result = await service.get_single_price("jpeg")
@@ -98,9 +116,9 @@ async def test_unexpected_single_miss_still_increments_failure(monkeypatch):
     )
     increment = Mock()
     monkeypatch.setattr(
-        price_service.PRICE_SERVICE_FAILURE,
-        "labels",
-        Mock(return_value=Mock(inc=increment)),
+        price_service.PRICE_SERVICE_SINGLE_CACHE_MISSES,
+        "inc",
+        increment,
     )
 
     result = await service.get_single_price("unexpected-token")

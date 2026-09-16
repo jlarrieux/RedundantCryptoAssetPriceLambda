@@ -9,8 +9,14 @@ from pricing import redis_cache_service
 from pricing.redis_cache_service import get_cached_prices_batch
 
 # Metrics
-PRICE_SERVICE_FAILURE = Counter('price_service_complete_batch_failures_total',
-                                'Number of times all APIs failed for a batch', ['type'])
+PRICE_SERVICE_BATCH_REDIS_ERRORS = Counter(
+    'price_service_batch_redis_errors_total',
+    'Number of Redis errors while fetching a batch',
+)
+PRICE_SERVICE_SINGLE_CACHE_MISSES = Counter(
+    'price_service_single_cache_miss_total',
+    'Number of unexpected single-asset cache misses',
+)
 PRICE_SERVICE_REQUEST_TIME = Histogram('price_service_request_duration_seconds',
                                        'Time spent processing complete request')
 
@@ -45,7 +51,7 @@ class PriceService:
 
             if errored_assets:
                 self.logger.error(f"Redis errors for assets in batch mode: {errored_assets}")
-                PRICE_SERVICE_FAILURE.labels('batch').inc()
+                PRICE_SERVICE_BATCH_REDIS_ERRORS.inc()
 
             failed_assets = missed_assets + errored_assets
             if failed_assets:
@@ -68,7 +74,7 @@ class PriceService:
                         f"Known unresolvable asset {asset} missed in redis cache"
                     )
                 else:
-                    PRICE_SERVICE_FAILURE.labels('single').inc()
+                    PRICE_SERVICE_SINGLE_CACHE_MISSES.inc()
                 return None
             except Exception as e:
                 self.logger.error(f"Error fetching price for {asset}: {str(e)}")
