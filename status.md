@@ -1,7 +1,7 @@
 # PriceService — Project Status
 
-**Last updated:** 2026-09-15 (chg_priceservice_006 — debug print() statements converted to logger.debug(), no longer bypassing log-level filtering; deployed, Nomad job version 39; see Completed stage)
-**Anchor:** main @ cef50da (v1.0.10, deployed 2026-09-15, Nomad job version 39, healthy)
+**Last updated:** 2026-09-16 (chg_priceservice_007 — split `price_service_complete_batch_failures_total` into two unambiguous counters; deployed v1.0.11, Nomad job version 40, live-verified; see Completed stage)
+**Anchor:** main @ 0f329be (v1.0.11, deployed 2026-09-16, Nomad job version 40, healthy)
 **Status:** active
 
 > Descriptive, not normative. Specs/ADRs/README/Akasha win on conflict; disagreement means THIS file is stale.
@@ -10,10 +10,10 @@
 
 | Question | Current state |
 | --- | --- |
-| Service health | 4/4 Nomad allocations healthy (job version 39) |
-| Current deployment | v1.0.10, digest `sha256:650e82215d0ed9378de3f0d718bb951a2f74f534e4a319cf845c7a75e95bc44e` |
-| Latest change | Converted two leftover debug `print()` statements in `/price` and `/prices` to `logger.debug(...)` — they now respect log-level filtering and flow through the structured `CustomFormatter`/`TraceContextFilter` pipeline instead of unconditionally spamming stdout (and Filebeat/Elasticsearch) on every request. |
-| Verification | 24 tests passed (including an updated assertion on the exact `logger.debug` call sequence); live-verified post-deploy: 0 occurrences of the old raw `[DEBUG price_app` pattern in a real allocation's logs, alongside genuine production traffic. |
+| Service health | 12/12 Nomad allocations healthy (job version 40) |
+| Current deployment | v1.0.11, digest `sha256:57d452265a09447eb9d57bad61b912dc1656d4fc2cd29522f803ff99fba3df03` |
+| Latest change | Split the ambiguous `price_service_complete_batch_failures_total{type=...}` counter into two separately-named counters — `price_service_batch_redis_errors_total` (genuine Redis pipeline failure) and `price_service_single_cache_miss_total` (ordinary cache miss). Confirmed zero Grafana dashboards/alerts referenced the old name before renaming, so this was a zero-consumer-impact change. |
+| Verification | 25 tests passed; live-verified post-deploy via `nomad alloc exec` + a direct `curl` to the app's own `/metrics` endpoint — both new counter names are genuinely served, old name confirmed absent from the deployed source. |
 | Top risk | None for this change. |
 
 ## What this project is
@@ -25,6 +25,14 @@ CoinGecko-delisted assets"](http://192.168.1.252:8686/api/items/6a95acef868bdef6
 in the Cryptofund20x project.
 
 ## Completed stage
+
+**Ambiguous failure metric split into two unambiguous counters (2026-09-16, `chg_priceservice_007`, Talit hotfix, genuine dual LGTM round 1, auto-merged; commit `c264efd`, deployed v1.0.11, Nomad job version 40).** Closes Akasha `6a8afa92f34fb84c8cd9a39e`, narrowed by an earlier partial fix (`chg_pricepopulator_006`'s `KNOWN_UNRESOLVABLE_ASSETS` allowlist). `price_service_complete_batch_failures_total{type="batch"|"single"}` conflated a genuine Redis pipeline failure signal with ordinary single-asset cache-miss noise under one counter name — a dashboard reading it unfiltered would see a misleading failure rate.
+
+**Verified first, before deciding anything:** searched all 25-30 Grafana dashboards and all 69 Grafana alert rules for any reference to the old metric name. Zero matches anywhere — the one similarly-named alert ("Saver Batch Failure") queries a completely unrelated Saver-owned metric. No dashboard or alert currently reads this metric in any form, so the false-failure-rate risk this task worried about was not reaching anyone today.
+
+**Given zero current consumers, restructured the metric now rather than leaving it ambiguous for a future dashboard author.** Split into `price_service_batch_redis_errors_total` (the genuine Redis error signal) and `price_service_single_cache_miss_total` (the ordinary cache-miss signal, same `KNOWN_UNRESOLVABLE_ASSETS` exclusion preserved). Same increment conditions, same call sites — purely a naming/structure change with zero behavior change. Live `openspec/specs/redis-batch-optimization/spec.md`, README, and tests updated; historical references (this file's own prior entries, archived OpenSpec changes, `investigation/` root-cause evidence) correctly left untouched.
+
+Independently verified by the Overlord: full suite re-run fresh — 25 passed, matching the implementer's count exactly. Deployed v1.0.11 (job version 40, 12/12 healthy); live-verified via `nomad alloc exec` + a direct `curl` to the real allocation's own `/metrics` endpoint — both new counter names genuinely served, old name confirmed absent from deployed source.
 
 **Debug `print()` statements converted to `logger.debug()` (2026-09-15, `chg_priceservice_006`, Talit hotfix, genuine dual LGTM round 1, auto-merged; commit `cef50da`).** Closes Akasha `69d97ee0df08d2f1594f0252`. Two leftover debug statements in `/price` and `/prices` dumped full request headers to stdout on every request, unconditionally — bypassing this file's own `CustomFormatter`/`TraceContextFilter` logging pipeline and its `INFO`-level gate entirely, so Filebeat shipped the resulting spam to Elasticsearch regardless of configured verbosity.
 
