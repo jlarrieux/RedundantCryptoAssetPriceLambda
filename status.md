@@ -1,7 +1,7 @@
 # PriceService — Project Status
 
 **Last updated:** 2026-11-03 (chg_priceservice_008 — `GET /price/<asset>` now returns the producer `observed_at`; deployed v1.0.12, Nomad job version 42, live-verified; see Completed stage)
-**Anchor:** main @ c84afc9 (v1.0.12, deployed 2026-11-03 19:0x CST, Nomad job version 42, 12/12 allocations running)
+**Anchor:** main @ f7c85cd (code release c84afc9) (v1.0.12, deployed and live-verified by 2026-11-03 19:12 CST, Nomad job version 42, 12/12 allocations running)
 **Status:** active
 
 > Descriptive, not normative. Specs/ADRs/README/Akasha win on conflict; disagreement means THIS file is stale.
