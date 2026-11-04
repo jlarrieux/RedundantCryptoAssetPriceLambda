@@ -3,6 +3,18 @@
 PriceService is the Cryptofund20x HTTP service that reads cached cryptocurrency
 prices from Redis and exposes single-asset and batch-price endpoints.
 
+## Price responses
+
+`GET /price/<asset>` returns `asset`, `usd_price`, `volume_last_24_hours`, and
+`current_marketcap_usd`. `GET /prices?assets=...` keeps the
+`{"prices": [success_dict, failed_list]}` envelope and returns successful
+Redis hashes with their existing fields, including `timestamp`. Both endpoints
+include `observed_at` unchanged when the hash contains it and omit the key when
+it is absent. The producer's value is an aware UTC ISO-8601 timestamp with an
+explicit `+00:00` offset; it records when the producer prepared the cache
+write, not when CoinGecko sampled the data. Freshness decisions belong to the
+consumer.
+
 ## Local verification
 
 Install `requirements.txt` in the project environment, then run:

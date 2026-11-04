@@ -137,6 +137,8 @@ async def price_single(asset: str):
             "volume_last_24_hours": result["volume_last_24_hours"],
             "current_marketcap_usd": result["current_marketcap_usd"],
         }
+        if "observed_at" in result:
+            response_data["observed_at"] = result["observed_at"]
 
         REQUEST_LATENCY.labels(endpoint="price_single", type="single").observe(time.time() - start_time)
         CURRENT_REQUESTS.dec()
