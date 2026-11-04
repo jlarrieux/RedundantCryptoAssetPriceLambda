@@ -1,7 +1,7 @@
 # PriceService — Project Status
 
-**Last updated:** 2026-09-16 (chg_priceservice_007 — split `price_service_complete_batch_failures_total` into two unambiguous counters; deployed v1.0.11, Nomad job version 40, live-verified; see Completed stage)
-**Anchor:** main @ 0f329be (v1.0.11, deployed 2026-09-16, Nomad job version 40, healthy)
+**Last updated:** 2026-11-03 (chg_priceservice_008 — `GET /price/<asset>` now returns the producer `observed_at`; deployed v1.0.12, Nomad job version 42, live-verified; see Completed stage)
+**Anchor:** main @ c84afc9 (v1.0.12, deployed 2026-11-03 19:0x CST, Nomad job version 42, 12/12 allocations running)
 **Status:** active
 
 > Descriptive, not normative. Specs/ADRs/README/Akasha win on conflict; disagreement means THIS file is stale.
@@ -10,11 +10,11 @@
 
 | Question | Current state |
 | --- | --- |
-| Service health | 12/12 Nomad allocations healthy (job version 40) |
-| Current deployment | v1.0.11, digest `sha256:57d452265a09447eb9d57bad61b912dc1656d4fc2cd29522f803ff99fba3df03` |
-| Latest change | Split the ambiguous `price_service_complete_batch_failures_total{type=...}` counter into two separately-named counters — `price_service_batch_redis_errors_total` (genuine Redis pipeline failure) and `price_service_single_cache_miss_total` (ordinary cache miss). Confirmed zero Grafana dashboards/alerts referenced the old name before renaming, so this was a zero-consumer-impact change. |
-| Verification | 25 tests passed; live-verified post-deploy via `nomad alloc exec` + a direct `curl` to the app's own `/metrics` endpoint — both new counter names are genuinely served, old name confirmed absent from the deployed source. |
-| Top risk | None for this change. |
+| Service health | 12/12 Nomad allocations running and 12 Consul-passing instances (job version 42, 2026-11-03 19:12 CST) |
+| Current deployment | v1.0.12, digest `sha256:d5bcf67c887cbd0b7b5010dc4548529a1e1c50410aa4a5d466109efbbca5b436` |
+| Latest change | `GET /price/<asset>` now returns the producer's `observed_at` string verbatim when the Redis hash holds it and omits the key when absent; `GET /prices` already passed the raw hash through and is now specified and tested (shape and legacy `timestamp` unchanged). Reader half of Akasha 6ae926af (producer half: PricePopulator v1.0.18). |
+| Verification | 33 passed (25 baseline plus 8 new), twice; five mutants each fail a named test; live `GET /price/weth` on all 12 instances returned `observed_at` in `+00:00` form, age about 219 s, with exactly five fields; `GET /prices` shape and `timestamp` unchanged; `price_app.py` hash inside the running allocation equals the reviewed file (`906cfd10…`). |
+| Top risk | A hash written before PricePopulator v1.0.18 lacks `observed_at` until its next 4-minute write; consumers must treat a missing key as unavailable, never as fresh. |
 
 ## What this project is
 
@@ -25,6 +25,8 @@ CoinGecko-delisted assets"](http://192.168.1.252:8686/api/items/6a95acef868bdef6
 in the Cryptofund20x project.
 
 ## Completed stage
+
+**Producer observation time returned by the reader (2026-11-03, `chg_priceservice_008`, Full Talaria with a director, gpt-6-luna for all roles, merged 2026-11-04T00:58:57Z (2026-11-03 18:58 CST); commits `a2a6b69` and release `c84afc9`, deployed v1.0.12, Nomad job version 42).** Akasha `6ae9bcf102b3a6140d174f38`. `price_single` copies `observed_at` into its response only when the Redis hash contains it; the key is omitted when absent, never `null`, never a request-time clock, never derived from the legacy `timestamp`. `GET /prices` keeps returning the raw per-asset hash, so it already carried `observed_at` and `timestamp` from the producer deploy on; this change makes that an explicit, tested contract and keeps the `{"prices": [success_dict, failed_list]}` envelope. New capability `price-observation-time`; tests in `tests/test_price_observed_at_api.py` drive the real Quart routes with Redis faked at the client boundary.
 
 **Ambiguous failure metric split into two unambiguous counters (2026-09-16, `chg_priceservice_007`, Talit hotfix, genuine dual LGTM round 1, auto-merged; commit `c264efd`, deployed v1.0.11, Nomad job version 40).** Closes Akasha `6a8afa92f34fb84c8cd9a39e`, narrowed by an earlier partial fix (`chg_pricepopulator_006`'s `KNOWN_UNRESOLVABLE_ASSETS` allowlist). `price_service_complete_batch_failures_total{type="batch"|"single"}` conflated a genuine Redis pipeline failure signal with ordinary single-asset cache-miss noise under one counter name — a dashboard reading it unfiltered would see a misleading failure rate.
 
