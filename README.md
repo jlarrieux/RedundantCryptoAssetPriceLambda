@@ -25,8 +25,11 @@ pytest -q
 
 ## Operations
 
-The service exposes `/` for health and `/metrics` for Prometheus. Its Nomad job
-is deployed from the homelab jobs checkout using `deploy.sh` with
+The service exposes `GET /` for health, `GET /price/<asset>` for one cached
+price, `GET /prices?assets=...` for batch prices, and `GET /metrics` for
+Prometheus. `GET /transform-asset` was removed because its copied mapping had
+drifted and no caller was found in the audited scope. Its Nomad job is deployed
+from the homelab jobs checkout using `deploy.sh` with
 `cryptofund20x/price-service.hcl`.
 
 `PriceService()` is constructed by request handlers. Its named `PriceService`

@@ -128,7 +128,7 @@ async def test_unexpected_single_miss_still_increments_failure(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_price_app_hot_path_messages_are_debug_and_errors_are_unchanged(
+async def test_price_app_routes_and_unknown_route_behavior_are_unchanged(
     monkeypatch,
 ):
     debug = Mock()
@@ -144,24 +144,96 @@ async def test_price_app_hot_path_messages_are_debug_and_errors_are_unchanged(
                 "usd_price": 1,
                 "volume_last_24_hours": 2,
                 "current_marketcap_usd": 3,
+                "observed_at": "2026-11-05T12:00:00+00:00",
             }
 
         async def get_prices(self, assets):
-            return {asset: {} for asset in assets}
+            prices = {asset: {"usd_price": 1} for asset in assets}
+            return prices, []
 
     monkeypatch.setattr(price_app, "PriceService", FakePriceService)
     client = price_app.app.test_client()
 
-    assert (await client.get("/transform-asset?asset=BTC")).status_code == 200
-    assert (await client.get("/price/btc")).status_code == 200
-    assert (await client.get("/prices?assets=btc,eth")).status_code == 200
-    assert (await client.get("/transform-asset")).status_code == 400
-    assert (await client.get("/price/%20")).status_code == 400
+    single = await client.get("/price/btc")
+    assert single.status_code == 200
+    assert await single.get_json() == {
+        "asset": "btc",
+        "usd_price": 1,
+        "volume_last_24_hours": 2,
+        "current_marketcap_usd": 3,
+        "observed_at": "2026-11-05T12:00:00+00:00",
+    }
 
-    assert debug.call_args_list[0] == (("Transforming asset BTC",),)
-    assert debug.call_args_list[1].args[0].startswith("Request headers for /price: ")
-    assert debug.call_args_list[2] == (("Fetching price for asset: btc",),)
-    assert debug.call_args_list[3].args[0].startswith("Request headers for /prices: ")
-    assert debug.call_args_list[4] == (("Fetching prices for assets: ['btc', 'eth']",),)
-    error.assert_called_once_with("No asset specified")
+    batch = await client.get("/prices?assets=btc,eth")
+    assert batch.status_code == 200
+    assert await batch.get_json() == {
+        "prices": [
+            {"btc": {"usd_price": 1}, "eth": {"usd_price": 1}},
+            [],
+        ]
+    }
+
+    root = await client.get("/")
+    assert root.status_code == 200
+    assert await root.get_data(as_text=True) == "OK"
+
+    metrics = await client.get("/metrics")
+    assert metrics.status_code == 200
+    assert metrics.headers["Content-Type"] == price_app.CONTENT_TYPE_LATEST
+    assert b"# HELP requests_total" in await metrics.get_data()
+
+    def application_metric_samples():
+        return tuple(
+            sorted(
+                (
+                    sample.name,
+                    tuple(sorted(sample.labels.items())),
+                    sample.value,
+                )
+                for metric in (
+                    price_app.REQUEST_COUNT,
+                    price_app.ERROR_COUNT,
+                    price_app.REQUEST_LATENCY,
+                )
+                for family in metric.collect()
+                for sample in family.samples
+            )
+        )
+
+    before_unknown_paths = application_metric_samples()
+    removed_route = await client.get("/transform-asset?asset=BTC")
+    another_unknown_route = await client.get("/path-that-does-not-exist")
+    health_path = await client.get("/health")
+    after_unknown_paths = application_metric_samples()
+
+    assert removed_route.status_code == another_unknown_route.status_code == 404
+    assert removed_route.headers["Content-Type"] == another_unknown_route.headers[
+        "Content-Type"
+    ]
+    assert await removed_route.get_data() == await another_unknown_route.get_data()
+    assert health_path.status_code == 404
+    assert health_path.headers["Content-Type"] == another_unknown_route.headers[
+        "Content-Type"
+    ]
+    assert await health_path.get_data() == await another_unknown_route.get_data()
+    assert after_unknown_paths == before_unknown_paths
+    assert not any(
+        dict(labels).get("endpoint") == "transform-asset"
+        for _, labels, _ in after_unknown_paths
+    )
+
+    invalid_single = await client.get("/price/%20")
+    assert invalid_single.status_code == 400
+
+    assert debug.call_args_list[0].args[0].startswith(
+        "Request headers for /price: "
+    )
+    assert debug.call_args_list[1] == (("Fetching price for asset: btc",),)
+    assert debug.call_args_list[2].args[0].startswith(
+        "Request headers for /prices: "
+    )
+    assert debug.call_args_list[3].args[0] == (
+        "Fetching prices for assets: ['btc', 'eth']"
+    )
+    error.assert_not_called()
     warning.assert_called_once_with("Empty or invalid asset provided.")

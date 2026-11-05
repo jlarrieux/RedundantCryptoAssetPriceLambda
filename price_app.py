@@ -14,7 +14,6 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST, core, ProcessCollector
 from quart import request, Quart, jsonify
 
-import transformer
 from price_service import PriceService
 
 # Configure global propagator for trace context extraction from HTTP headers
@@ -70,32 +69,6 @@ async def health_check():
 async def metrics():
     """Expose Prometheus metrics."""
     return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
-
-
-@app.route('/transform-asset', methods=['GET'])
-async def transform_asset():
-    start_time = time.time()
-    REQUEST_COUNT.labels(endpoint="transform-asset", method="GET", type="transformed").inc()
-    CURRENT_REQUESTS.inc()
-
-    asset = request.args.get('asset')
-    if not asset:
-        logger.error('No asset specified')
-        ERROR_COUNT.labels(endpoint="transform-asset", error_type="missing_asset").inc()
-        CURRENT_REQUESTS.dec()
-        return jsonify({"error": "No asset specified"}), 400
-
-    try:
-        logger.debug(f"Transforming asset {asset}")
-        transformed_asset = transformer.transform_asset(asset)
-        REQUEST_LATENCY.labels(endpoint="transform-asset", type="transformed").observe(time.time() - start_time)
-        CURRENT_REQUESTS.dec()
-        return jsonify({"transformed_asset": transformed_asset, "initial_asset": asset}), 200
-    except Exception as e:
-        logger.error(f"Error transforming asset {asset}: {e}")
-        ERROR_COUNT.labels(endpoint="transform-asset", error_type="exception").inc()
-        CURRENT_REQUESTS.dec()
-        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/price/<asset>', methods=['GET'])
