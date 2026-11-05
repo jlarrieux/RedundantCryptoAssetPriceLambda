@@ -1,7 +1,7 @@
 # PriceService — Project Status
 
-**Last updated:** 2026-11-03 (chg_priceservice_008 — `GET /price/<asset>` now returns the producer `observed_at`; deployed v1.0.12, Nomad job version 42, live-verified; see Completed stage)
-**Anchor:** main @ f7c85cd (code release c84afc9) (v1.0.12, deployed and live-verified by 2026-11-03 19:12 CST, Nomad job version 42, 12/12 allocations running)
+**Last updated:** 2026-11-05 (chg_priceservice_009 — the stale `/transform-asset` endpoint and `transformer.py` are removed; deployed v1.0.13, Nomad job version 43, live-verified; see Completed stage)
+**Anchor:** main @ d88a099 (code change b72c97e, release d88a099) (v1.0.13, deployed and live-verified by 2026-11-05 16:40 CST, Nomad job version 43, 12/12 allocations running)
 **Status:** active
 
 > Descriptive, not normative. Specs/ADRs/README/Akasha win on conflict; disagreement means THIS file is stale.
@@ -10,11 +10,11 @@
 
 | Question | Current state |
 | --- | --- |
-| Service health | 12/12 Nomad allocations running and 12 Consul-passing instances (job version 42, 2026-11-03 19:12 CST) |
-| Current deployment | v1.0.12, digest `sha256:d5bcf67c887cbd0b7b5010dc4548529a1e1c50410aa4a5d466109efbbca5b436` |
-| Latest change | `GET /price/<asset>` now returns the producer's `observed_at` string verbatim when the Redis hash holds it and omits the key when absent; `GET /prices` already passed the raw hash through and is now specified and tested (shape and legacy `timestamp` unchanged). Reader half of Akasha 6ae926af (producer half: PricePopulator v1.0.18). |
-| Verification | 33 passed (25 baseline plus 8 new), twice; five mutants each fail a named test; live `GET /price/weth` on all 12 instances returned `observed_at` in `+00:00` form, age about 219 s, with exactly five fields; `GET /prices` shape and `timestamp` unchanged; `price_app.py` hash inside the running allocation equals the reviewed file (`906cfd10…`). |
-| Top risk | A hash written before PricePopulator v1.0.18 lacks `observed_at` until its next 4-minute write; consumers must treat a missing key as unavailable, never as fresh. |
+| Service health | 12/12 Nomad allocations running, deployment successful, `/price/weth`, `/prices` and `/` answered 200 on all 12 instances (job version 43, 2026-11-05 16:40 CST) |
+| Current deployment | v1.0.13, digest `sha256:4eee7639928b408012e95bd75893da78f4ac8f5a7f5e900e7cd8b0a9a5598c68` |
+| Latest change | `GET /transform-asset` and the hand-copied `transformer.py` mapping (24 of 57 keys drifted from PricePopulator's, two stale) are removed; the path now answers like any unknown path (404). Specified by the new `price-service-api-surface` capability. Akasha 6aea987a. |
+| Verification | 33 passed twice (random order and `-p no:randomly`), matching the baseline; three Overlord mutants (re-adding the route, `/metrics` 500, `/` 204) each fail the named route test; `price_app.py` inside the running allocation equals the reviewed file (`2122f768…`), `transformer.py` absent, `APP_VERSION` 1.0.13; on all 12 instances `/transform-asset?asset=BTC` and `/nope` returned an identical 404 and `/price/weth` still carried `observed_at`. |
+| Top risk | A caller the audit could not see (Nomad job files outside the repos, non-family repos, Elasticsearch access logs, requests older than the roughly 42-day metric retention) would now receive 404. Detect it in the Uvicorn access log; rollback is reverting `b72c97e` and redeploying. A hash written before PricePopulator v1.0.18 still lacks `observed_at` until its next 4-minute write; consumers must treat a missing key as unavailable. |
 
 ## What this project is
 
@@ -25,6 +25,8 @@ CoinGecko-delisted assets"](http://192.168.1.252:8686/api/items/6a95acef868bdef6
 in the Cryptofund20x project.
 
 ## Completed stage
+
+**Stale transform copy and endpoint removed (2026-11-05, `chg_priceservice_009`, Full Talaria with a director, gpt-6-luna for all roles, merged 2026-11-05T22:27Z (2026-11-05 16:27 CST); change commit `b72c97e`, release `d88a099`, deployed v1.0.13, Nomad job version 43).** Akasha `6aea987a369f9e8777464dff`. PriceService's `transformer.py` was a hand copy of PricePopulator's mapping, reachable only through `GET /transform-asset`; the price endpoints never called it. The Overlord's read-only audit found no request for the endpoint in the roughly 42 days of metric history (zero `transform-asset` series under any job; the job's own series are `price_single` and `price_multiple`), no Grafana dashboard or alert reference, and no caller in nine family repos, so the route, its import and metrics, and the module were removed rather than realigned (aligning would keep a second copy of a mapping PricePopulator owns). The audit did not cover Nomad job files outside the repos, non-family repos or Elasticsearch access logs. The removed path now returns the same 404 status, content type and body as any unregistered path; `/`, `/price/<asset>`, `/prices` and `/metrics` are unchanged. Tests in `tests/test_price_service_logging.py` go through the real Quart app; the new main spec is `openspec/specs/price-service-api-surface/spec.md` and the README lists the remaining routes.
 
 **Producer observation time returned by the reader (2026-11-03, `chg_priceservice_008`, Full Talaria with a director, gpt-6-luna for all roles, merged 2026-11-04T00:58:57Z (2026-11-03 18:58 CST); commits `a2a6b69` and release `c84afc9`, deployed v1.0.12, Nomad job version 42).** Akasha `6ae9bcf102b3a6140d174f38`. `price_single` copies `observed_at` into its response only when the Redis hash contains it; the key is omitted when absent, never `null`, never a request-time clock, never derived from the legacy `timestamp`. `GET /prices` keeps returning the raw per-asset hash, so it already carried `observed_at` and `timestamp` from the producer deploy on; this change makes that an explicit, tested contract and keeps the `{"prices": [success_dict, failed_list]}` envelope. New capability `price-observation-time`; tests in `tests/test_price_observed_at_api.py` drive the real Quart routes with Redis faked at the client boundary.
 
@@ -66,12 +68,15 @@ unaffected by this change.
 
 ## Next tasks
 
+- Watch the Uvicorn access log for any `404` on `/transform-asset` over the next weeks; a hit means a caller the audit missed and the endpoint should be restored (revert `b72c97e`).
 - Monitor the source-volume reduction over normal traffic (carried over,
   unaffected by this change).
 - Re-scope and re-size the remaining PricePopulator payload-log demotion slice
   (carried over, unaffected by this change).
 
 ## Work ledger
+
+Akasha task `6aea987a369f9e8777464dff` is done through Full Talaria change `chg_priceservice_009` (2026-11-05); slice 4 of the follow-up to `6ae8970302b3a6140d174ed5` (transform_asset drift). The PricePopulator mapping is the only remaining copy.
 
 Akasha task `69d97ed3df08d2f1594f0251` is done through Talit change
 `chg_priceservice_002`. The overlapping cache-hit task was reconciled so it cannot
